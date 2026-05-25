@@ -16,11 +16,12 @@ import * as actionTypes from '@/redux/auth/types';
 import { request } from '@/request';
 import AuthModule from '@/modules/AuthModule';
 import Loading from '@/components/Loading';
-import { COUNTRY_OPTIONS } from '@/utils/countryOptions';
+import { getCountryOptions } from '@/utils/countryOptions';
 import useLanguage from '@/locale/useLanguage';
 
 export default function Onboarding() {
   const translate = useLanguage();
+  const countryOptions = getCountryOptions(translate);
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
@@ -139,7 +140,7 @@ export default function Onboarding() {
             <Form.Item
               name="companyName"
               label={translate('Company Name')}
-              rules={[{ required: true, message: 'Company name is required' }]}
+              rules={[{ required: true, message: translate('company_name_is_required') }]}
             >
               <Input
                 prefix={<BankOutlined className="site-form-item-icon" />}
@@ -151,13 +152,13 @@ export default function Onboarding() {
             <Form.Item
               name="companyCountry"
               label={translate('Country')}
-              rules={[{ required: true, message: 'Please select your country' }]}
+              rules={[{ required: true, message: translate('please_select_your_country') }]}
             >
               <Select
                 showSearch
                 placeholder={translate('Select your country')}
                 optionFilterProp="label"
-                options={COUNTRY_OPTIONS}
+                options={countryOptions}
                 size="large"
                 suffixIcon={<GlobalOutlined className="site-form-item-icon" />}
               />

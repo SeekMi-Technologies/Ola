@@ -51,20 +51,20 @@ const LoginPage = () => {
               loading={isLoading}
               size="large"
             >
-              {translate('Log in')}
+              {translate('login')}
             </Button>
           </Form.Item>
 
           <div style={{ textAlign: 'center', marginTop: 10 }}>
-            <Text>Don't have an account? </Text>
-            <Link to="/register">Sign up</Link>
+            <Text>{translate('dont_have_an_account')} </Text>
+            <Link to="/register">{translate('sign_up')}</Link>
           </div>
         </Form>
       </Loading>
     );
   };
 
-  return <AuthModule authContent={<FormContainer />} AUTH_TITLE="Sign in" />;
+  return <AuthModule authContent={<FormContainer />} AUTH_TITLE="sign_in" />;
 };
 
 export default LoginPage;

@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import useLanguage from '@/locale/useLanguage';
 import { Form, Button, Typography } from 'antd';
+import { LeftOutlined } from '@ant-design/icons';
 
 import { register } from '@/redux/auth/actions';
 import { selectAuth } from '@/redux/auth/selectors';
@@ -31,6 +32,10 @@ const RegisterPage = () => {
   const FormContainer = () => {
     return (
       <Loading isLoading={isLoading}>
+        <button className="settings-back-btn" onClick={() => navigate('/login')} style={{ marginBottom: 16 }}>
+          <LeftOutlined />
+          <span>{translate('back')}</span>
+        </button>
         <Form
           layout="vertical"
           name="register_form"
@@ -47,20 +52,20 @@ const RegisterPage = () => {
               loading={isLoading}
               size="large"
             >
-              Sign up
+              {translate('sign_up')}
             </Button>
           </Form.Item>
           
           <div style={{ textAlign: 'center', marginTop: 10 }}>
-            <Text>Already have an account? </Text>
-            <Link to="/login">Log in</Link>
+            <Text>{translate('already_have_an_account')} </Text>
+            <Link to="/login">{translate('login')}</Link>
           </div>
         </Form>
       </Loading>
     );
   };
 
-  return <AuthModule authContent={<FormContainer />} AUTH_TITLE="Sign up" />;
+  return <AuthModule authContent={<FormContainer />} AUTH_TITLE="sign_up" />;
 };
 
 export default RegisterPage;
