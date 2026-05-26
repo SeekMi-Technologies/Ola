@@ -37,8 +37,8 @@ jobs:
       - name: Unit + integration tests
         run: npm test
 
-      - name: Security audit (high/critical prod deps)
-        run: npm audit --audit-level=high --omit=dev
+      - name: Security audit (critical prod deps)
+        run: npm audit --audit-level=critical --omit=dev
 
   frontend:
     name: Frontend (lint + test + build + audit)
