@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [CICD, dev, main]
   push:
-    branches: [CIDI, dev, main]
+    branches: [CICD, dev, main]
 
 jobs:
   backend:
