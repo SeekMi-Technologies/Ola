@@ -1,37 +1,35 @@
-# Ola WhatsApp via Baileys — 多租户实现方案（从零写起）
+# Ola WhatsApp via Baileys — 多租户实现方案
 
 > 状态：设计研判（前瞻），尚未实现。
 > 作者：Yuandong + Claude，2026-05-26。
-> 定位：决策从 Meta Tech Provider 反转回 Baileys 之后的新主线。这是一份**实现方案设计**，不是 bug 报告——`nanobot/bridge/` 里那份 Baileys 代码是 HKUDS 上游附带的，从未在 Ola 启用过，等于白纸。本文把"白纸 + 我们前次项目的踩坑经验 + Ola 多租户需求"合成一套落地设计。
+> 定位：决策从 Meta Tech Provider 反转回 Baileys 之后的新主线。这是一份**实现方案设计**——`Ola_bot/bridge/` 里那份 Baileys 代码是 HKUDS/OpenClaw 上游来的**单租户**实现，`whatsapp.enabled = false`，从未在 Ola prod 跑过。本文把「现有单租户代码的实地审计 + 我们前次项目的踩坑经验 + Ola 多租户需求」合成一套落地设计。
 
 ---
 
-## 关于本文的取证边界（先说清楚）
+## 取证说明（已补齐）
 
-写这份文档时所在的是 Claude Code web session，**只 clone 了 CRM 仓库 `SeekMi-Technologies/Ola`**，sibling 的 `../nanobot`（Python AI backend + Baileys bridge）**不在这个环境里**。所以：
+初稿时 web session 只 clone 了 CRM 仓库，sibling `Ola_bot`（nanobot + Baileys bridge）不在手边，所以那些 nanobot 行号当时标了「未核实」。**现已把 `SeekMi-Technologies/Ola_bot`（分支 `ola-main`）clone 进来逐行核对**，本文所有行号——CRM 侧（`backend/src/...`）和 nanobot 侧（`Ola_bot/...`）——都是实地核实过的。下文不再有「未核实」标注。
 
-- 凡是引用 **CRM 侧** 代码的地方（`backend/src/mcp/*`、`olaController/chat.js`、model、config template），都带了**真实文件名 + 行号**，是这次实地核实过的。
-- 凡是讲 **nanobot / bridge / Baileys 行为** 的地方，依据是 **HKUDS 上游知识 + 我们前次项目（OpenClaw 等）的踩坑经验**，标注为「未在本环境核实」。落地实现时，第一步就是把 `../nanobot/bridge/whatsapp.ts`、`channels/whatsapp.py` 拉下来逐行对一遍本文的假设。
-
-凡是本文写「待核实」的，都是因为代码不在手边，不是含糊其辞。
+> nanobot 路径写成 `Ola_bot/...`，对应生产部署里的 sibling `../nanobot/`。
 
 ---
 
 ## 0. 一段话总结
 
-- **决策反转**：从 Meta WhatsApp Tech Provider（Cloud API / Embedded Signup）回到 Baileys。原因：Meta 在媒体、群、模板审批、Embedded Signup 商户审批上的实际可用能力，对一个早期外贸 CRM 来说门槛高、周期长，反而 < Baileys 的「扫码即用」。Tech Provider 路径的完整研判保留在 `whatsapp_multitenancy.md`（如果该文件在你本地存在）。
-- **现状**：nanobot 自带一份 Baileys bridge 代码，`nanobot.config.template.json` 里 `whatsapp.enabled = false`，从未在 prod 跑过。多租户改造**不是改 bug，是基于这份 starting point 设计实现**。
-- **多租户本质**：把「1 个 Node bridge 进程 = 1 个 Baileys socket = 1 个 authDir = 1 个 WhatsApp 账号」这条线，复制成「每个销售一条」，并在 nanobot → CRM MCP 的调用里注入 `X-Acting-As`，让每个销售只看到自己的客户/报价。
+- **决策反转**：从 Meta WhatsApp Tech Provider（Cloud API / Embedded Signup）回到 Baileys。原因：Meta 在媒体、群、模板审批、Embedded Signup 商户审批上的实际可用能力，对早期外贸 CRM 门槛高、周期长，反而 < Baileys 的「扫码即用」。Tech Provider 路径的完整研判保留在 `whatsapp_multitenancy.md`（若本地存在）。
+- **现状**：`Ola_bot/bridge/` 是一份**写死单租户**的 Baileys 接入（1 进程 = 1 socket = 1 authDir = 1 token = 1 WhatsApp 账号），`nanobot.config.template.json` 里 `whatsapp.enabled = false`，从未在 prod 启用。
+- **多租户本质**：把这条单租户线复制成「每个销售一条」，并让每条线在 nanobot → CRM MCP 调用里注入正确的 `X-Acting-As`，使每个销售只看到自己的客户/报价。
+- **关键利好**：**多租户在 MCP 层已经建好了**——nanobot 的 `MCPClientPool` 按 `(server, acting_as)` 分独立 httpx transport（`Ola_bot/nanobot/agent/tools/mcp.py:259-260`），CRM 侧 `X-Acting-As` 鉴权链也齐全。缺的只有两块：(1) bridge 从单连接变多连接；(2) WhatsApp channel 把 `_acting_as` 喂进消息 metadata（email channel 已经这么做了，WhatsApp 没做）。
 - **推荐路径**：**单进程多 WebSocket route**（`/wa/<admin_id>`），per-admin 独立 authDir + 确定性 acting_as 注入 + 4 个历史坑全部前置规避。
-- **acting_as 是隐藏主线**：CRM 的 MCP server 要求 `X-Acting-As`，业务工具缺它就 401（`headerResolver.js:30-35`）。askola **网页**路径已经在 `chat.js:317` 注入了，但 WhatsApp 入站走 nanobot 自己的 channel loop，**不经过 `chat.js`**——所以 acting_as 必须由 WhatsApp channel 自己注入。路径 C 让这件事变成确定性的（route 里就带着 admin_id）。
+- **acting_as 是隐藏主线**：CRM MCP server 要求 `X-Acting-As`，业务工具缺它就 401（`headerResolver.js:30-35`）。askola **网页**路径在 `chat.js:317` 注入了；但 channel 路径靠的是把 `_acting_as` 放进 `InboundMessage.metadata`，agent loop 再取出来设置（`loop.py:683-685`）。email 做了（`email.py:190-191`），**WhatsApp 没做**（`whatsapp.py:284-288` 的 metadata 里没有 `_acting_as`）——这是当前的核心缺口。
 
 ---
 
-## 1. 当前代码状态 —— 等于白纸
+## 1. 当前代码状态 —— 单租户、acting_as 缺口
 
 ### 1.1 CRM 侧：WhatsApp 是关着的
 
-`ola/nanobot.config.template.json` 的 channels 段里：
+`ola/nanobot.config.template.json` 的 channels 段：
 
 ```json
 "whatsapp": {
@@ -43,115 +41,156 @@
 }
 ```
 
-事实清单：
-
 | 字段 | 现状 | 多租户含义 |
 |---|---|---|
 | `enabled` | `false` | 从未在 prod 启用 |
-| `bridgeUrl` | 单一 `ws://localhost:3001` | **单连接**，没有 per-admin 路由概念 |
-| `bridgeToken` | 空 | 没有鉴权 |
-| `allowFrom` | `[]` | 没有白名单 |
-| `groupPolicy` | `open` | 群消息全收（对比其他 channel 多是 `mention`） |
+| `bridgeUrl` | 单一 `ws://localhost:3001` | **单连接**，无 per-admin 路由 |
+| `bridgeToken` | 空 | nanobot 侧会自动生成本地 secret（见 §1.3） |
+| `allowFrom` | `[]` | 无白名单 |
+| `groupPolicy` | `open` | 群消息全收 |
 
-对照同文件里 **已启用** 的 `email` channel（`enabled: true`，完整 IMAP/SMTP 配置）——email 是当前唯一跑通的「非网页」入站通道，它的 acting_as 解析方式是 WhatsApp 要照抄的参照（见 §1.4、§4.4）。
+### 1.2 nanobot bridge：写死单租户（实地核实）
 
-### 1.2 nanobot 侧：上游附带，未核实
+`Ola_bot/bridge/src/` 四个文件：`index.ts`（入口）、`server.ts`（WS server）、`whatsapp.ts`（Baileys 包装）、`types.d.ts`。
 
-> 以下为上游知识，未在本环境核实（`../nanobot` 不在 web session 里）。
+**单租户铁证：**
 
-- 三文件架构（HKUDS 上游惯例）：`bridge/whatsapp.ts`（Baileys socket 包装）+ `bridge/server.ts`（WebSocket server，对应 `ws://localhost:3001`）+ `channels/whatsapp.py`（nanobot 侧 channel，连 bridge 的 WS 客户端）。
-- bridge 注释提到 "Based on OpenClaw"——所以它跟我们前次项目同源，那 4 个坑大概率在这份代码里也存在或半成品。
-- 认证：`useMultiFileAuthState`，authDir 物理落在 `~/.nanobot/whatsapp-auth/`（单目录，单账号）。
-- `syncFullHistory` 大概率已是 `false`（上游默认）。
-
-**落地第一步**：把这三文件拉下来，逐行核对 §1.2、§2 的每一条假设，把「未核实」替换成行号。
-
-### 1.3 既有结构能复用什么
-
-即便是白纸，starting point 仍有用：
-
-- Baileys 的 `useMultiFileAuthState` + socket 生命周期包装——直接复用，不要重写。
-- bridge ↔ nanobot 的 WebSocket 双向流模式——保留，改成多路由即可。
-- nanobot channel 的 inbound→agent→outbound 管线——保留，加 acting_as 注入。
-
-不必为了多租户从零重写 Baileys 接入，只需要在「连接维度」上从 1 变 N，并补 acting_as + contacts 持久化 + robustness。
-
-### 1.4 一个 dormant 缺口：WhatsApp 入站没有 acting_as
-
-这是本文唯一一个**已经存在于代码里、只是没被触发过**的问题（区别于 §2 的历史坑）。
-
-CRM 的 MCP server 鉴权链（实地核实）：
-
-- `backend/src/mcp/headerResolver.js:22-44` — `decideActingAdmin(rawHeader, toolLabel)`：
-  - 没有 `X-Acting-As` 且工具**不在白名单** → `401 UNAUTHORIZED`（`headerResolver.js:30-35`）。
-  - 没有 `X-Acting-As` 但工具**在白名单** `SYSTEM_TOOLS`（`headerResolver.js:9-20`：`initialize` / `tools/list` / `ping` / `salesperson.lookup_by_email` / `notifications/*`）→ 回退到 systemAdmin。
-  - 有 `X-Acting-As` → `resolveActingAdmin(id)` 解析成具体 Admin（`bootstrap.js:88+`）。
-- `backend/src/mcp/bootstrap.js:56-70` — systemAdmin = 第一个 `enabled & !removed` 的 owner（fallback admin/user）。这是 acting_as 缺失时的兜底身份。
-
-CRM 网页路径**已经**注入了 acting_as：
-
-- `backend/src/controllers/appControllers/olaController/chat.js:316-317` —
-  ```js
-  // X-Acting-As scopes MCP business tools to logged-in admin (#185)
-  'X-Ola-Acting-As': userId.toString(),
+- `Ola_bot/bridge/src/index.ts:26-28` — 三个全局单值：
+  ```ts
+  const PORT = parseInt(process.env.BRIDGE_PORT || '3001', 10);
+  const AUTH_DIR = process.env.AUTH_DIR || join(homedir(), '.nanobot', 'whatsapp-auth');
+  const TOKEN = process.env.BRIDGE_TOKEN?.trim();
   ```
-  网页 askola 把登录销售的 `_id` 透传给 nanobot，nanobot 再转成 `X-Acting-As` 发给 MCP。
+  单端口、单 authDir、单 token。
+- `Ola_bot/bridge/src/server.ts:33` — `BridgeServer` 持有 **唯一** 一个 `private wa: WhatsAppClient | null`。
+- `server.ts:127-134` — `broadcast()` 把每条消息发给 **所有** 连上来的 Python client，没有路由概念。
+- `server.ts:44-56` — WS server 绑 `127.0.0.1`、拒绝带 `Origin` 头的浏览器连接、要求首帧 `auth` token（`server.ts:72-85`）。安全基线不错，但 token 是单一全局的。
 
-**缺口**：WhatsApp 入站消息**不经过 `chat.js`**——它从 Baileys → bridge → `channels/whatsapp.py` → nanobot agent loop 进来。这条路径上目前没有任何环节注入 acting_as。后果（基于上述鉴权链推断）：
+`whatsapp.ts` 里的 `WhatsAppClient`（`whatsapp.ts:43`）：
 
-- WhatsApp 触发的 MCP **业务工具**（`customer.*` / `merch.*` / `quote.*`）→ 缺 `X-Acting-As` → **401**，agent 干不了正事。
-- 或者，如果 nanobot 侧偷懒走了 systemAdmin 兜底 → **所有销售的 WhatsApp 客户都记到同一个 owner 名下**，多租户直接失效。
+- `whatsapp.ts:79` — `useMultiFileAuthState(this.options.authDir)`，authDir 由构造参数注入（来自 index.ts 的单一 AUTH_DIR）。
+- `whatsapp.ts:3` — 注释 "Based on OpenClaw's working implementation"——和我们前次项目同源。
+- 只订阅三个事件：`connection.update`（`whatsapp.ts:106`）、`creds.update`（`whatsapp.ts:138`）、`messages.upsert`（`whatsapp.ts:141`）。**没有任何 `contacts.*` 订阅**（坑 2.1 的根源）。
 
-email channel 怎么解的（参照）：`salesperson.lookup_by_email` 被特意放进 `SYSTEM_TOOLS` 白名单（`headerResolver.js:15` + 注释 4-6 行），解决「先有鸡还是先有蛋」——email 用这个工具先把 sender 解析成 `admin._id`，再用它做后续业务调用的 acting_as。
+### 1.3 bridge 启动 / token 自动发放
 
-WhatsApp 的解法更简单（见 §4.4）：路径 C 里 **route 本身就是 `admin_id`**，连查找工具都不需要——这条连接收到的每条消息，acting_as 恒等于路由的 admin_id。
+- `Ola_bot/nanobot/channels/whatsapp.py:39-53` — `_load_or_create_bridge_token()`：bridge token 不配就在 `~/.nanobot/whatsapp-auth/bridge-token` 自动生成（`secrets.token_urlsafe(32)`，chmod 600）。
+- `whatsapp.py:309-357` — `_ensure_bridge_setup()`：把 bridge 源码 copy 到 `get_bridge_install_dir()`，`npm install` + `npm run build`，缓存 `dist/index.js`。
+- `whatsapp.py:92-118` — `login()`：spawn `npm start` 跑 bridge 进程做 QR 扫码（阻塞到扫完）。
+
+### 1.4 核心缺口：WhatsApp 入站没有 acting_as
+
+这是当前代码里**已存在、只是没被触发**的问题（WhatsApp 没启用过）。
+
+**acting_as 在 nanobot 里的真实流转机制（实地核实）：**
+
+1. acting_as 是个 contextvar（`Ola_bot/nanobot/agent/admin_context.py`：`set_acting_as` / `get_acting_as`）。
+2. **网页路径**：`Ola_bot/nanobot/api/server.py:236` — `set_acting_as(request.headers.get("X-Ola-Acting-As"))`。CRM 的 `chat.js:317` 发 `X-Ola-Acting-As`，server.py 设进 contextvar。
+3. **channel 路径**：contextvar **不跨 bus queue 传播**，所以每个 channel 必须把 admin_id 放进 `InboundMessage.metadata["_acting_as"]`，agent loop 在 `_dispatch` 里取出来重新 set。原话见 `Ola_bot/nanobot/agent/loop.py:683-685`：
+   ```python
+   # Re-establish acting-as in this task's context: ContextVar does not
+   # propagate across the bus queue, so channels carry it via metadata.
+   _acting = (msg.metadata or {}).get("_acting_as")
+   set_acting_as(_acting)
+   ```
+4. MCP 调用按 acting_as 分 transport：`Ola_bot/nanobot/agent/tools/mcp.py:259-260` — `MCPClientPool` 为每个 `(server, acting_as)` 建独立 httpx client，把 `X-Acting-As` 在 client 构造时 bake 进 header。**多租户在 MCP 层已经天然支持 N 个并发 acting_as。**
+
+**email 怎么喂的（正确参照，实地核实）：**
+
+- `Ola_bot/nanobot/channels/email.py:177` — `admin_id = await self._resolve_sender_acting_as(sender)`
+- `email.py:267-345` — `_resolve_sender_acting_as` 调白名单 MCP 工具 `salesperson.lookup_by_email`（发件人邮箱 → admin._id）。这工具被 CRM 放进 `SYSTEM_TOOLS` 白名单（`headerResolver.js:15`），解决「先有鸡还是先有蛋」——它本身不需要 acting_as 就能调。
+- `email.py:190-191` — `item_metadata["_acting_as"] = admin_id`
+- `email.py:193-198` — `_handle_message(..., metadata=item_metadata)`，把 acting_as 喂进去。
+
+**WhatsApp 的缺口（实地核实）：**
+
+- `Ola_bot/nanobot/channels/whatsapp.py:279-289` — 调 `_handle_message` 时 `metadata` 只有 `{message_id, timestamp, is_group}`，**没有 `_acting_as`**：
+  ```python
+  await self._handle_message(
+      sender_id=sender_id,
+      chat_id=sender,
+      content=content,
+      media=media_paths,
+      metadata={
+          "message_id": message_id,
+          "timestamp": data.get("timestamp"),
+          "is_group": data.get("isGroup", False),
+      },
+  )
+  ```
+- 后果（结合 `loop.py:684` + `headerResolver.js`）：WhatsApp 消息进 loop 时 `_acting = None` → `set_acting_as(None)` → MCP 业务工具（`customer.*` / `merch.*` / `quote.*`）缺 `X-Acting-As` → **401**（`headerResolver.js:30-35`，非白名单工具）。agent 干不了正事。
+
+**CRM 侧鉴权链（实地核实）：**
+
+- `backend/src/mcp/headerResolver.js:22-44` — `decideActingAdmin`：无 acting_as 且非白名单 → 401；白名单工具（`SYSTEM_TOOLS`，`headerResolver.js:9-20`）→ 回退 systemAdmin；有 acting_as → `resolveActingAdmin`。
+- `backend/src/mcp/bootstrap.js:56-70` — systemAdmin = 第一个 enabled owner（acting_as 缺失兜底）。
+- `backend/src/controllers/appControllers/olaController/chat.js:316-317` — 网页 askola 注入 `X-Ola-Acting-As`。
+
+> **结论**：多租户的 MCP 管道（per-acting_as transport）+ CRM 鉴权 + email 的注入范式**全都现成**。WhatsApp 多租户的核心改造量集中在两点：bridge 多连接（§3/§4.2）+ WhatsApp channel 把 `_acting_as` 喂进 metadata（§4.4）。
+
+### 1.5 既有结构能复用什么
+
+- Baileys socket 生命周期包装（`whatsapp.ts` 的 `WhatsAppClient`）、media 下载（`whatsapp.ts:190-217`）、文本/语音/媒体内容提取（`whatsapp.ts:219-251`）——直接复用。
+- 语音转写已接好：`whatsapp.py:259-269` 调 `self.transcribe_audio`（和 #257 STT 工作同源）。
+- 消息去重：`whatsapp.py:77` + `217-222`（OrderedDict 上限 1000）——复用。
+- bridge ↔ Python WebSocket 双向流模式——保留，改成多路由。
+
+不需要从零重写 Baileys 接入，只需把「连接维度」从 1 改 N，并补 acting_as + contacts 持久化 + robustness。
 
 ---
 
-## 2. 我们之前踩过的 4 个坑 —— 设计前置约束
+## 2. 4 个历史坑 —— 现已在本代码库定位
 
-> 这 4 个是我们在前次项目（OpenClaw 等 Baileys 接入）踩过的，不是本 repo 现有 bug。写在这里是**为了在新实现里前置规避**。每条结构：现象 → Baileys 真相 → 多租户设计要点。
+> 这 4 个是我们前次项目（OpenClaw 等）踩过的。因为本 bridge 同源（`whatsapp.ts:3`），逐行核对后确认它们**在现有代码里全部存在或半成品**。每条：现象 → Baileys 真相 → 现有代码定位 → 多租户设计要点。
 
 ### 2.1 联系人自定义名字看不见
 
-- **现象**：销售在自己手机里给客户改了备注「老王 - 美的厨具」，但 bridge 推给 nanobot 的 inbound payload 里只有 phone/JID，agent 和 CRM 都拿不到这个备注名，客户列表里全是号码。
-- **Baileys 真相**：
-  - `pushName` 字段**每条消息都带**——但那是**对方自己设的** profile name，不是销售设的备注。
-  - 销售手机端的备注名，要靠订阅 `contacts.upsert` / `contacts.update` 事件才能同步过来（linked device 协议会把主机的通讯录改动推给从设备）。
-  - 启动时 Baileys 还会发一次 `contacts.set`（≈ 同步一份初始通讯录快照）。
+- **现象**：销售在手机里给客户改了备注「老王 - 美的厨具」，但入站消息里只有 phone/JID，CRM 客户列表全是号码。
+- **Baileys 真相**：`pushName` 每条消息都带（对方自设的 profile name，非销售备注）；销售手机端的备注名要靠 `contacts.upsert` / `contacts.update` 事件同步，启动时 `contacts.set` 给一次快照。
+- **现有代码定位**：
+  - `whatsapp.ts` **完全没订阅 `contacts.*`**（只有 connection/creds/messages 三个事件，`whatsapp.ts:106/138/141`）。
+  - 入站 payload（`whatsapp.ts:176-185`）只暴露 `sender`（`msg.key.remoteJid`）+ `pn`（`msg.key.remoteJidAlt`），**既无 pushName 也无 displayName**。
 - **多租户设计要点**：
-  1. bridge **per-admin client 各自订阅** `contacts.upsert` + `contacts.update`（每个销售的连接只同步自己手机的通讯录）。
-  2. inbound payload 加 `displayName` 字段，按优先级填：`contacts 备注名 > pushName > phone > LID`。
-  3. per-admin 持久化 `jid → displayName` 映射（见 §4.1 的 `state.json`），重启不丢。
+  1. bridge per-admin client 各自订阅 `contacts.upsert` + `contacts.update` + 启动 `contacts.set`。
+  2. 入站 payload 加 `displayName`，优先级 `contacts 备注名 > pushName > phone > LID`。
+  3. per-admin 持久化 `jid → displayName`（§4.1 `state.json`），重启不丢。
 
 ### 2.2 超长号码（LID 长数字串）
 
-- **现象**：用户看到 sender 是 `98765432109876543210@lid.whatsapp.net` 这种 19-20 位长串，不是 `+86...` 电话，没法跟 CRM Client 对上。
-- **Baileys 真相**：WhatsApp 2024 起多设备协议把部分场景的 phone 替换成 **LID（Linked ID）**，是个不透明长整数。某些场景（尤其新对话、群成员）拿不到 phone↔LID 映射，只有 LID。
+- **现象**：sender 显示成 `...@lid.whatsapp.net` 的 19-20 位长串，不是 `+86` 电话，跟 CRM Client 对不上。
+- **Baileys 真相**：WhatsApp 2024 多设备协议起把部分场景的 phone 换成不透明 **LID**，新对话/群成员常拿不到 phone↔LID 映射。
+- **现有代码定位**（已有处理，但脆弱）：
+  - `whatsapp.py:232-251` 已按 JID 后缀分类 phone/LID 并算 `sender_id`，fallback 链 `whatsapp.py:251`：`phone_id or self._lid_to_phone.get(lid_id) or lid_id or id_a or id_b`。
+  - **但 `self._lid_to_phone` 是进程内 dict（`whatsapp.py:78`），只在「同一条消息里 phone 和 LID 同时出现」时才写入（`whatsapp.py:249-250`），且 bridge/进程重启全丢**——这正是前次踩的坑。
+  - `whatsapp.py:281` 用 `chat_id=sender`（完整 LID）做回复地址。
 - **多租户设计要点**：
-  1. per-admin `state.json` 持久化 `lid → phone` 映射，进程启动时加载（**关键**：映射只能是内存 dict 的话，bridge 重启就全丢——这正是前次踩的坑）。
-  2. bridge 启动订阅 `contacts.set`（Baileys 启动快照），尽量 bootstrap 一批 lid↔phone。
-  3. 显示层 fallback 链：`displayName > phone > LID`。**LID 只做内部主键兜底，永远不直接展示给销售**。
-  4. CRM Client 绑定字段（§5.2 `wa_jid`）存「稳定主键」——优先 phone（E.164），phone 拿不到才退 LID，并记 `wa_jid_kind` 标明类型，将来拿到 phone 再回填。
+  1. per-admin `state.json` 持久化 `lid → phone`，启动加载。
+  2. bridge 订 `contacts.set` 启动快照，bootstrap 一批 lid↔phone。
+  3. 显示层 fallback `displayName > phone > LID`，**LID 只做内部主键，永不直接展示给销售**。
+  4. CRM Client 绑定字段（§5.2）记 `wa_jid` + `wa_jid_kind`（phone/lid），将来拿到 phone 回填。
 
 ### 2.3 Baileys 历史信息导入 API 不可靠
 
-- **现象**：接入后销售期望看到「之前 6 个月的 WA 对话」，但 `syncFullHistory` 即使开了，多设备协议下也只能拿最近 ~50 个会话 + 少量消息，而且这个 API 在 Baileys 半年内多次 breaking change。
-- **Baileys 真相**：历史回看是 WhatsApp 多设备协议本身的限制，不是 Baileys 的 bug，开关也救不了。
+- **现象**：销售期望看到接入前几个月的 WA 对话，但多设备协议下即使开 `syncFullHistory` 也只有最近 ~50 会话，且该 API 半年内多次 breaking。
+- **Baileys 真相**：历史回看是多设备协议本身的限制，开关救不了。
+- **现有代码定位**：`whatsapp.ts:94` — `syncFullHistory: false`（现状已关，是对的）。
 - **多租户设计要点**：
-  1. `syncFullHistory: false` 保留（少同步少出错）。
-  2. **产品端明确文案**：「Ola 接管 WA 后只处理**新对话**，历史记录在你手机里」。Onboarding 扫码页就要写清楚，避免销售期待落空。
-  3. 不写任何依赖历史回看的产品功能。如果业务真要历史，走 nanobot 的 message store **从启用那天起自己累积**，不依赖 Baileys 拉历史。
+  1. `syncFullHistory: false` 保留。
+  2. 产品端明确文案：「Ola 接管后只处理**新对话**，历史在你手机里」（onboarding 扫码页写清）。
+  3. 不写依赖历史回看的功能；真要历史，走 nanobot message store 从启用起自累积。
 
 ### 2.4 Bridge 连接不稳
 
-- **现象**：长时间运行后偶尔「不收消息但也不报 disconnect」（zombie connection）；或短时间多次重连风暴；或固定 5s 重连撞上 ws server 重启。
-- **Baileys 真相**：socket 的 `'close'` 事件**不可靠**——服务端可能静默 drop 连接而 client 不报 close。必须有**应用层 staleness 检测**，不能只依赖 close 事件触发重连。
+- **现象**：长跑后偶尔「不收消息但也不报 disconnect」（zombie）；或重连风暴；或固定 5s 重连撞 ws server 重启。
+- **Baileys 真相**：socket 的 `'close'` 事件不可靠，必须有应用层 staleness 检测。
+- **现有代码定位**（两侧都是裸 5s，无 backoff/heartbeat）：
+  - bridge：`whatsapp.ts:116-130` — `connection === 'close'` 时固定 `setTimeout(reconnect, 5000)`，只靠 `reconnecting` 布尔防重入，**无 heartbeat、无 backoff、无 staleness 检测**。
+  - Python：`whatsapp.py:154-156` — 连接异常后固定 `await asyncio.sleep(5)` 重连，**同样无 backoff**。
 - **多租户设计要点**：
-  1. **heartbeat**：每 30s 检查「上次收到任何 traffic 的时间」，超过 90s 无 traffic 主动 reconnect（不等 close 事件）。
-  2. **reconnect backoff**：`5s → 15s → 45s → 120s`（cap），不要固定 5s（固定 5s 会在 ws server 重启时打出重连风暴）。
-  3. 状态机扩出 `reconnecting` / `stale_detected`，broadcast 给 nanobot 侧，再透传给前端展示（销售能看到「连接中…」而不是默默丢消息）。
-  4. **per-admin 隔离**：一个销售的重连风暴**不能拖累别人**。这是路径选型（§3）的关键考量——单进程方案必须保证一个 client 的异常被 try/catch 在 client 边界内，不冒泡到事件循环。
+  1. heartbeat：每 30s 检查上次收消息时间，>90s 无 traffic 主动 reconnect（不等 close 事件）。
+  2. backoff：`5s → 15s → 45s → 120s`（cap），连上后 reset。
+  3. 状态机扩 `reconnecting` / `stale_detected`，broadcast 给 Python → CRM → 前端。
+  4. **per-admin 隔离**：一个销售的重连风暴不能拖累别人——单进程方案必须把每个 client 的事件 handler 用 try/catch 包在 client 边界内（符合 CLAUDE.md「无 silent error」：catch 里 log 具体 admin_id + 错误）。
 
 ---
 
@@ -159,23 +198,23 @@ WhatsApp 的解法更简单（见 §4.4）：路径 C 里 **route 本身就是 `
 
 ### 选项 A：每租户独立 Node bridge 进程
 
-- N 个进程，每个 ~120-150MB，N 个端口，N 个 supervisor 单元。
-- ✅ 隔离最彻底：一个挂不影响别的；authDir 进程级 + 文件级双隔离；坑 2.4 的传染风险 = 0。
-- ❌ 资源最贵（8 销售 ≈ 1GB+ 常驻）；端口/supervisor 管理复杂；动态增删销售要动 supervisor 配置。
+- N 进程 × ~120-150MB，N 端口，N supervisor 单元。
+- ✅ 隔离最彻底；authDir 进程级 + 文件级双隔离；坑 2.4 传染风险 = 0。
+- ❌ 资源最贵（8 销售 ≈ 1GB+）；端口/supervisor 复杂；动态增删销售要动 supervisor。
 
 ### 选项 B：单进程多 socket，payload 打 tenant_id tag
 
-- 1 个进程内 N 个 Baileys socket，inbound/outbound payload 加 `tenant_id` 字段路由。
+- 1 进程 N 个 Baileys socket，inbound/outbound payload 加 `tenant_id` 路由。
 - ✅ 资源最低。
-- ❌ 路由全靠 payload tag，容易串号（outbound 错发是灾难）；Baileys 在同进程内多 socket 的错误隔离能力**未经我们验证**；坑 2.4 一个 socket 抖动可能拖累全员。
+- ❌ 路由靠 tag 易串号（现有 `broadcast` 是发给所有 client，`server.ts:127-134`，要彻底改造）；同进程多 socket 错误隔离未验证；坑 2.4 一个 socket 抖动可能拖全员。
 
 ### 选项 C ★ 推荐：单进程多 WebSocket route（`/wa/<admin_id>`）
 
-- bridge 进程暴露 **路由级** 接口：`/wa/<admin_id>?token=<per_admin_token>`。
-- 进程内每条路由一个 `WhatsAppClient` 实例 + 独立 authDir + 独立 state.json。
-- nanobot 侧每个启用 WA 的销售一个 channel 实例，连自己的 route。
-- ✅ 资源共享（单进程）+ **路由级隔离**（连接维度天然带 admin_id，outbound 不可能串号）；**acting_as 确定性**（route 即 admin_id，§4.4）；动态增删销售 = 加/删一条路由，不重启进程。
-- ❌ 单进程 fate-share（进程崩了全员断）——靠 systemd auto-restart + 进程内 client 边界 try/catch 缓解；authDir 在磁盘，重启后各 client 自动恢复会话不用重扫码。
+- bridge 暴露路由级接口 `/wa/<admin_id>?token=<per_admin_token>`。
+- 进程内 `Map<admin_id, WhatsAppClient>`，每路由独立 authDir + state.json。
+- nanobot 侧每个启用 WA 的销售一个 channel 实例连自己的 route。
+- ✅ 资源共享 + **路由级隔离**（连接维度带 admin_id，outbound 不可能串号）；**acting_as 确定性**（route 即 admin_id，§4.4 零查找）；动态增删销售 = 加/删一条路由。
+- ❌ 单进程 fate-share——靠 systemd auto-restart + client 边界 try/catch 缓解；authDir 在磁盘，重启自动恢复会话免重扫码。
 
 ### 对比表
 
@@ -183,14 +222,16 @@ WhatsApp 的解法更简单（见 §4.4）：路径 C 里 **route 本身就是 `
 |---|---|---|---|
 | 资源（8 销售） | ~1GB+ | 最低 | 低 |
 | 隔离强度 | 最强 | 弱（靠 tag） | 强（靠 route） |
-| 部署复杂度 | 高（N supervisor） | 低 | 低 |
-| 坑 2.4 传染风险 | 0 | 高 | 低（client 边界隔离） |
+| 部署复杂度 | 高 | 低 | 低 |
+| 坑 2.4 传染风险 | 0 | 高 | 低（client 边界） |
 | outbound 串号风险 | 0 | 中 | 0（route 物理隔离） |
 | acting_as 注入 | 需查找 | 需查找 | **确定性（route=admin_id）** |
-| 动态增删销售 | 改 supervisor | 改 config | 加/删一条路由 |
-| 上线速度 | 慢 | 中 | 快 |
+| 改动量（对照现有代码） | 重写 supervisor + 进程管理 | 重写 broadcast 路由 + socket 管理 | 重写 server.ts 为多路由 + channel 绑 admin_id |
+| 动态增删销售 | 改 supervisor | 改 config | 加/删路由 |
 
-**推荐 C**：在「资源、隔离、acting_as 确定性、上线速度」上综合最优。单进程 fate-share 是它唯一的真实代价，但 systemd auto-restart + 磁盘 authDir（重启免重扫码）把代价压到可接受。规模真到几十个销售、单进程扛不住时，C 可以平滑演进成「每 N 个销售一个进程」的分片（A 和 C 的混合），代码改动小。
+**推荐 C**：综合最优，且最贴合现有架构——MCP 层（`mcp.py` per-acting_as transport）已支持 N 租户，bridge 只需从「单 `wa`」变「`Map<admin_id, wa>`」，channel 只需把 route 的 admin_id 当 `_acting_as` 喂进 metadata。单进程 fate-share 是唯一真实代价，systemd auto-restart + 磁盘 authDir 把它压到可接受。规模真大时可平滑演进成「每 N 销售一进程」分片。
+
+> **与 email 模型的对比**：email 是「单公司邮箱 + 按发件人查归属销售」（`salesperson.lookup_by_email`）。WhatsApp 路径 C 是「每销售自己的 WA 号 + acting_as = 连接本身」，**不需要查找工具**——因为身份是「哪条 route 收到的」而非「sender 是谁」。这是 WhatsApp 比 email 更干净的地方。
 
 ---
 
@@ -200,22 +241,22 @@ WhatsApp 的解法更简单（见 §4.4）：路径 C 里 **route 本身就是 `
 
 ```
 ~/.nanobot/wa/<admin_id>/
-├── auth/          ← Baileys useMultiFileAuthState 目录（每销售独立，扫码凭证）
-├── media/         ← 下载的媒体文件（图片/语音/文档）
-└── state.json     ← { lid→phone 映射, jid→displayName 映射, 元数据 }
+├── auth/          ← Baileys useMultiFileAuthState 目录（替代现 ~/.nanobot/whatsapp-auth/）
+├── media/         ← 下载的媒体（现 whatsapp.ts:192 是 authDir/../media，改成 per-admin）
+└── state.json     ← lid→phone 映射 + jid→displayName 映射 + 元数据
 ```
 
-`state.json` 解坑 2.1 + 2.2 的持久化载体：
+`state.json` 是坑 2.1 + 2.2 的持久化载体（替代现 `whatsapp.py:78` 的进程内 `_lid_to_phone`）：
 
 ```jsonc
 {
   "admin_id": "665f...",
   "contacts": {
     "<jid>": {
-      "displayName": "老王 - 美的厨具",   // 销售手机备注名（contacts.update 来）
-      "pushName": "Wang",                  // 对方 profile（消息带的）
-      "phone": "+8613800138000",           // E.164，可能为 null
-      "lid": "98765432109876543210",       // LID 长串，可能为 null
+      "displayName": "老王 - 美的厨具",   // contacts.update 来
+      "pushName": "Wang",                  // messages.upsert 带
+      "phone": "+8613800138000",           // E.164，可能 null
+      "lid": "98765432109876543210",       // 可能 null
       "source": "contacts",                // contacts | pushName | manual
       "updatedAt": 1716700000
     }
@@ -224,98 +265,100 @@ WhatsApp 的解法更简单（见 §4.4）：路径 C 里 **route 本身就是 `
 }
 ```
 
-> 旧的 `~/.nanobot/whatsapp-auth/`（单账号）作废，迁移成 `~/.nanobot/wa/<admin_id>/auth/`。第一个销售上线时直接走新结构，不需要迁移老数据（反正 WA 从没启用过）。
+> 现有单 authDir `~/.nanobot/whatsapp-auth/`（`index.ts:27`）作废，第一个销售直接走新结构，无需迁移（WA 从没启用过）。
 
 ### 4.2 bridge 接口（新）
 
+把 `server.ts` 的单 `wa` 改成 `Map<admin_id, WhatsAppClient>`，按 WS 路径路由：
+
 | 方法 | 路径 | 作用 |
 |---|---|---|
-| `WS` | `/wa/<admin_id>?token=<per_admin_token>` | 双向流：auth 事件 + inbound 消息 + outbound 指令 |
-| `GET` | `/wa/<admin_id>/status` | `connected` / `qr_pending` / `reconnecting` / `disconnected` / `logged_out` |
-| `POST` | `/wa/<admin_id>/login` | 触发该销售的 QR 生成（返回 QR 给前端展示） |
-| `DELETE` | `/wa/<admin_id>` | logout + 清 `auth/`（销售解绑/换号） |
+| `WS` | `/wa/<admin_id>?token=<per_admin_token>` | 双向流：auth + inbound + outbound（替代现 `broadcast` 全员广播） |
+| `GET` | `/wa/<admin_id>/status` | `connected`/`qr_pending`/`reconnecting`/`disconnected`/`logged_out` |
+| `POST` | `/wa/<admin_id>/login` | 触发该销售 QR 生成 |
+| `DELETE` | `/wa/<admin_id>` | logout + 清 `auth/` |
 
-- `per_admin_token`：每个销售一个，bridge 校验。不要用单一全局 token（那等于没隔离）。可以是 `HMAC(MCP_SERVICE_TOKEN, admin_id)` 派生，避免再存一张 token 表。
-- bridge 进程内维护 `Map<admin_id, WhatsAppClient>`，路由命中时 lazy 创建/复用 client。
+- `per_admin_token`：每销售一个，不要复用现在的单一全局 token（`index.ts:28`）。建议 `HMAC(MCP_SERVICE_TOKEN, admin_id)` 派生，免存 token 表。
+- 保留现有安全基线：绑 `127.0.0.1`、拒 Origin（`server.ts:44-56`）。
 
 ### 4.3 nanobot config —— 从静态 section 改 DB-driven
 
-现状是静态单 `[whatsapp]` section（§1.1）。多租户两种改法：
+现状是静态单 `[whatsapp]` section（`WhatsAppConfig`，`whatsapp.py:23-30`）。多租户：
 
-- ❌ 改成 N 个 `[whatsapp.tenants.<admin_id>]` 静态 section：每加一个销售要改 config + 重启 nanobot，运维噩梦。
-- ✅ **推荐**：保留一个 `[whatsapp]` 总开关，**销售列表 + 启用状态从 Mongo 拉**。nanobot 启动时查 `Admin.find({ wa_enabled: true })`（§5.1 新字段），为每个销售起一个 channel 实例连对应 route。销售启用/停用 WA → 改 DB → nanobot 定期 reconcile（或 CRM 调一个 nanobot 的 reload 接口）。
+- ❌ N 个静态 `[whatsapp.tenants.<admin_id>]`：每加销售改 config + 重启，运维噩梦。
+- ✅ **推荐**：留一个总开关，销售列表从 Mongo 拉——nanobot 启动查 `Admin.find({ wa_enabled: true })`（§5.1），为每个销售起一个 `WhatsAppChannel` 实例连对应 route。启用/停用改 DB → nanobot reconcile（或 CRM 调 reload 接口）。加销售 = 纯数据操作，零 config 改动、零重启。
 
-这样「加销售」是纯数据操作，零 config 改动、零重启。
+### 4.4 acting_as 注入（解 §1.4 缺口）—— 改动很小
 
-### 4.4 acting_as 注入（解 §1.4 缺口）
+路径 C 让它变确定性，且完全套用 email 已验证的范式：
 
-路径 C 让这件事变确定性：
-
-- `channels/whatsapp.py` 的 `WhatsAppChannel` 实例化时**绑定 `admin_id`**（就是它连的那条 route 的 admin_id）。
-- 该 channel 收到 inbound、调 MCP 工具时，**无条件注入** `X-Acting-As: <admin_id>`。
-- 对照 CRM 侧鉴权链（§1.4）：有了 `X-Acting-As`，业务工具走 `resolveActingAdmin`（`bootstrap.js:88+`）→ 正确 scope 到该销售。
-- **不需要** email 那种 `salesperson.lookup_by_email` 查找工具——因为 WhatsApp 的销售身份是「哪条 route 收到的」，不是「sender 是谁」。sender（客户）只用来匹配/创建 Client，acting_as 恒等于 route 的 admin_id。
-
-> 落地校验点（核对 nanobot 代码时确认）：`whatsapp.py` 的 inbound handler 调 `_handle_message` 时，确实把 `_acting_as=admin_id` 透传到了 MCP 调用的 header 链路上。email channel 是怎么传的，照抄那条链路。
+1. `WhatsAppChannel.__init__`（`whatsapp.py:71`）**绑定 `admin_id`**（它连的那条 route 的 id）。
+2. `_handle_bridge_message`（`whatsapp.py:279-289`）调 `_handle_message` 时，metadata 加一行：
+   ```python
+   metadata={
+       "message_id": message_id,
+       "timestamp": data.get("timestamp"),
+       "is_group": data.get("isGroup", False),
+       "_acting_as": self._admin_id,   # ← 新增，对照 email.py:191
+   },
+   ```
+3. 下游全自动跑通：`loop.py:684` 取 `_acting_as` → `set_acting_as` → `mcp.py:259-260` 把 `X-Acting-As` bake 进该 admin 的 transport → CRM `resolveActingAdmin`（`bootstrap.js:88+`）正确 scope。
+4. **不需要** email 那种 `salesperson.lookup_by_email`——WhatsApp 的销售身份来自 route，不是 sender。sender（客户 phone/LID）只用来匹配/创建 Client（`assigned` = 该 admin，§5.2）。
 
 ### 4.5 contacts / pushName 持久化（解坑 2.1 + 2.2）
 
-bridge 侧 per-admin client：
+bridge per-admin client：
 
-1. 订阅 `contacts.set`（启动快照）、`contacts.upsert`、`contacts.update`（增量）→ 更新 `state.json` 的 `contacts` + `lidToPhone`。
-2. 每条 `messages.upsert` 取 `pushName`，按优先级回填 `displayName`（不覆盖已有的 contacts 备注名）。
-3. inbound payload 加 `displayName`（已按 `contacts > pushName > phone > LID` 算好），nanobot/CRM 不用自己再算。
-4. `state.json` 写盘节流（debounce，比如 5s），避免高频消息打爆磁盘 IO。
+1. 订阅 `contacts.set`（启动快照）+ `contacts.upsert` + `contacts.update` → 写 `state.json` 的 `contacts` + `lidToPhone`。
+2. 每条 `messages.upsert`（`whatsapp.ts:141`）取 `msg.pushName`，按优先级回填 `displayName`（不覆盖已有 contacts 备注）。
+3. 入站 payload（`whatsapp.ts:176-185`）加 `displayName` 字段（已算好），Python/CRM 不重复算。
+4. `state.json` 写盘 debounce（~5s），避免高频消息打爆磁盘。
 
-CRM 侧（§5.2）：Client 落 `wa_jid` + `wa_display_name`，列表/详情展示用 `wa_display_name`，匹配用 `wa_jid`。
+CRM 侧：Client 落 `wa_jid` + `wa_display_name`（§5.2），展示用 `wa_display_name`，匹配用 `wa_jid`。
 
 ### 4.6 connection robustness（解坑 2.4）
 
-每个 `WhatsAppClient` 内置：
+每个 `WhatsAppClient` 内置（替代现 `whatsapp.ts:123-129` 的裸 5s）：
 
-1. **heartbeat 定时器**：每 30s 检查 `lastTrafficAt`，`now - lastTrafficAt > 90s` → 主动 `reconnect()`（不等 close 事件）。
-2. **backoff 状态**：`5s → 15s → 45s → 120s`（cap），成功连上后 reset。
-3. **状态广播**：`connected` / `reconnecting` / `stale_detected` / `logged_out`，经 WS 推给 nanobot → CRM → 前端。
-4. **错误边界**：单个 client 的所有事件 handler 包 try/catch，异常只 log + 标记该 client 状态，**绝不冒泡到进程事件循环**（保护其他销售的 client）。符合 CLAUDE.md「无 silent error」——catch 里要 log 具体 admin_id + 错误，不能 `catch(e){}`。
+1. heartbeat：每 30s 检查 `lastTrafficAt`，`now - lastTrafficAt > 90s` → 主动 reconnect。
+2. backoff：`5s → 15s → 45s → 120s`（cap），连上 reset。
+3. 状态广播 `connected/reconnecting/stale_detected/logged_out`，经 WS → Python（`whatsapp.py:291-299` 的 status 分支扩展）→ CRM → 前端。
+4. 错误边界：单 client 所有 handler 包 try/catch，异常只 log（带 admin_id）+ 标该 client 状态，**绝不冒泡到进程事件循环**（保护其他销售）。Python 侧 `whatsapp.py:154-156` 同步加 backoff。
 
 ---
 
 ## 5. Ola CRM 侧 schema 改动（最小集合）
 
-> 沿用 repo 既有的「可选字段 + 默认值 + 不需要 migration」模式（见 `Admin.js` 的 `language` / `transcribeProvider` 字段写法：旧文档读到 `undefined`/`null`，consumer 端 fallback）。
+> 沿用 repo 既有「可选字段 + 默认值 + 无 migration」模式（`Admin.js` 的 `language` / `transcribeProvider`：旧文档读 `undefined`/`null`，consumer fallback）。
 
 ### 5.1 Admin model（`backend/src/models/coreModels/Admin.js`）
 
-加 3 个字段：
-
 ```js
 // WhatsApp 多租户接入（per-salesperson Baileys 连接）
-wa_enabled: { type: Boolean, default: false },   // nanobot 据此决定是否为该销售起 channel
+wa_enabled: { type: Boolean, default: false },   // nanobot 据此决定是否起 channel
 wa_bridge_status: {
   type: String,
   enum: ['connected', 'qr_pending', 'reconnecting', 'disconnected', 'logged_out'],
   default: 'disconnected',
 },
-wa_phone_number: { type: String, default: null },  // 绑定后的展示号码（E.164）
+wa_phone_number: { type: String, default: null },  // 绑定后展示号码（E.164）
 ```
 
-旧 Admin 文档读到 `wa_enabled=false`（default），nanobot 不为其起 channel——零 migration，行为不变。
+旧 Admin 读到 `wa_enabled=false`，nanobot 不为其起 channel——零 migration。
 
 ### 5.2 Client model（`backend/src/models/appModels/Client.js`）
 
-加 2-3 个字段，把 WA 联系人绑到 Ola Client：
-
 ```js
-wa_jid: { type: String, default: null, index: true },   // 稳定主键：优先 E.164，退 LID
-wa_jid_kind: { type: String, enum: ['phone', 'lid'], default: null },  // 标明 wa_jid 类型（坑 2.2）
-wa_display_name: { type: String, default: null },        // 从 bridge 同步的备注名
+wa_jid: { type: String, default: null, index: true },                 // 稳定主键：优先 E.164，退 LID
+wa_jid_kind: { type: String, enum: ['phone', 'lid'], default: null }, // 标明 wa_jid 类型（坑 2.2）
+wa_display_name: { type: String, default: null },                     // bridge 同步的备注名
 ```
 
-注意 Client 已有 `assigned: { ref: 'Admin' }`（`Client.js:21`）——**这就是现成的销售归属字段**。WA 入站匹配/创建 Client 时，`assigned` = acting_as 的 admin_id，多租户的客户归属天然落到这里，不用新造归属概念。
+Client 已有 `assigned: { ref: 'Admin' }`（`Client.js:21`）——**现成的销售归属字段**。WA 入站匹配/创建 Client 时 `assigned` = acting_as 的 admin_id，多租户客户归属天然落这里。
 
 ### 5.3（推迟到 Phase 2）Organization / Membership
 
-本期模型：**1 admin = 1 公司 / 1 个 WA 业务号**，各连各的。`whatsapp_multitenancy.md §3` 描述的「6 销售 + 2 主管共享一个组织视图」是 Phase 2，**不阻塞本期**——本期先把「每个销售独立连、独立隔离」跑通。
+本期：**1 admin = 1 WA 业务号**，各连各的。`whatsapp_multitenancy.md §3` 的「6 销售 + 2 主管共享组织视图」是 Phase 2，不阻塞本期。
 
 ---
 
@@ -323,23 +366,20 @@ wa_display_name: { type: String, default: null },        // 从 bridge 同步的
 
 ### P0（上线 blocker）
 
-按依赖顺序：
-
-1. **核对 nanobot bridge 代码**（把 §1.2 / §2 的「未核实」换成行号）——动手第一件事。
-2. **bridge 多租户路由改造**（§4.2）：`/wa/<admin_id>` + per-admin client Map + token 校验。
-3. **per-admin authDir + state.json**（§4.1）。
-4. **acting_as 注入**（§4.4）：WhatsAppChannel 绑 admin_id，无条件注入 `X-Acting-As`。**这是多租户隔离的命门，没它一切归 systemAdmin。**
-5. **contacts 持久化**（§4.5）→ 一并解坑 2.1 + 2.2。
-6. **heartbeat + backoff**（§4.6）→ 解坑 2.4。
-7. **CRM schema**（§5.1 + §5.2）。
-8. **Onboarding UX**：QR 扫码页 + 状态展示（含坑 2.3 的「只接管新对话」文案）。
+1. **bridge 多租户路由改造**：`server.ts` 单 `wa` → `Map<admin_id, WhatsAppClient>`，`/wa/<admin_id>` 路由（§4.2）。
+2. **per-admin authDir + state.json**（§4.1）。
+3. **acting_as 注入**（§4.4）：`WhatsAppChannel` 绑 admin_id，metadata 加 `_acting_as`。**多租户隔离的命门，一行的事但漏了就全员归 systemAdmin。**
+4. **contacts 持久化**（§4.5）→ 解坑 2.1 + 2.2。
+5. **heartbeat + backoff**（§4.6）→ 解坑 2.4。
+6. **CRM schema**（§5.1 + §5.2）。
+7. **Onboarding UX**：QR 扫码页 + 状态展示（含坑 2.3「只接管新对话」文案）。
 
 ### P1（上线后迭代）
 
-- acting_as 解析失败的 fallback 行为（销售没绑 WA / 解析不到 → agent 该回什么，而不是 401 裸奔）。
-- 多设备 / 多端 logout 探测（销售在手机上「退出已链接设备」→ bridge 怎么感知并标 `logged_out`）。
-- WA 媒体从本地 `media/` 下沉到对象存储。
-- 坑 2.3 的产品文案打磨 + 自累积 message store（如果业务要历史）。
+- acting_as 解析失败 fallback（销售没绑 WA / 解析不到 → agent 回什么，而非 401 裸奔）。
+- 多设备 / 多端 logout 探测（销售手机「退出已链接设备」→ bridge 标 `logged_out`）。
+- WA 媒体从本地 `media/` 下沉对象存储。
+- 坑 2.3 产品文案 + 自累积 message store。
 
 ---
 
@@ -347,25 +387,50 @@ wa_display_name: { type: String, default: null },        // 从 bridge 同步的
 
 | # | 优先级 | 问题 | 我的倾向 |
 |---|---|---|---|
-| Q1 | P0 | 路径选 A / B / C？ | **C**（理由见 §3 对比表，acting_as 确定性 + 路由隔离） |
-| Q2 | P0 | bridge / nanobot / CRM 三处改动一个 PR 还是拆？ | **拆 2 个**：nanobot PR（含 bridge + whatsapp.py + acting_as + contacts + robustness）；CRM PR（schema + onboarding UI）。bridge 在 nanobot PR 内。 |
+| Q1 | P0 | 路径选 A / B / C？ | **C**（§3 对比表：acting_as 确定性 + 路由隔离 + 最贴合现有 MCP 多租户管道） |
+| Q2 | P0 | bridge / nanobot / CRM 三处改动一个 PR 还是拆？ | **拆 2 个**：Ola_bot PR（bridge 多路由 + whatsapp.py acting_as + contacts + robustness，PR → `ola-dev`）；CRM PR（schema + onboarding UI，PR → `dev`） |
 | Q3 | P0 | per_admin_token 怎么发？ | **HMAC(MCP_SERVICE_TOKEN, admin_id) 派生**，免存 token 表（§4.2） |
-| Q4 | P1 | authDir 备份策略？ | ECS 本地 + 定期快照；丢了大不了重扫码（authDir 不是不可再生） |
-| Q5 | P1 | 一个销售同时多设备登录？ | Baileys 是 linked device，主机退链即废——P1 探测 + 提示重扫，本期不处理 |
-| Q6 | P2 | 群消息政策？ | 现 `groupPolicy: open` 收全部；建议改 `mention`（对齐其他 channel），P2 再定 |
+| Q4 | P0 | WA 业务号模型：每销售各扫各的号（路径 C 前提），还是单公司号 + 按客户查归属（email 模型）？ | **每销售各扫各号**——隔离干净、acting_as 零查找。若要单号共享走 email 模型那套，是另一条路。 |
+| Q5 | P1 | authDir 备份策略？ | ECS 本地 + 定期快照；丢了重扫码（authDir 可再生） |
+| Q6 | P1 | 一个销售多设备登录？ | Baileys 是 linked device，主机退链即废——P1 探测 + 提示重扫 |
+| Q7 | P2 | 群消息政策？ | 现 `groupPolicy: open`（`whatsapp.py:30/228-230`）；建议改 `mention` 对齐其他 channel |
 
 ---
 
-## 附：本文引用的 CRM 侧真实代码锚点
+## 附：本文引用的真实代码锚点
+
+### CRM 侧（`SeekMi-Technologies/Ola`）
 
 | 文件 | 行 | 内容 |
 |---|---|---|
-| `ola/nanobot.config.template.json` | whatsapp 段 | `enabled:false` / `bridgeUrl:ws://localhost:3001` 单连接 |
-| `backend/src/mcp/headerResolver.js` | 9-20 | `SYSTEM_TOOLS` 白名单 |
+| `ola/nanobot.config.template.json` | whatsapp 段 | `enabled:false` / 单 `bridgeUrl` |
+| `backend/src/mcp/headerResolver.js` | 9-20 | `SYSTEM_TOOLS` 白名单（含 `salesperson.lookup_by_email`） |
 | `backend/src/mcp/headerResolver.js` | 22-44 | `decideActingAdmin`：缺 acting_as 且非白名单 → 401 |
-| `backend/src/mcp/bootstrap.js` | 56-70 | systemAdmin 解析（acting_as 缺失兜底） |
+| `backend/src/mcp/bootstrap.js` | 56-70 | systemAdmin 兜底 |
 | `backend/src/mcp/bootstrap.js` | 88+ | `resolveActingAdmin` |
-| `backend/src/controllers/appControllers/olaController/chat.js` | 316-317 | 网页 askola 注入 `X-Ola-Acting-As`（WhatsApp 路径没有） |
-| `backend/src/mcp/README.md` | 38-42 | MCP 安全模型（Bearer + 网络隔离两道防线） |
-| `backend/src/models/coreModels/Admin.js` | 39-55 | 可选字段模式（`language` / `transcribeProvider`） |
-| `backend/src/models/appModels/Client.js` | 21 | `assigned: ref Admin`（现成的销售归属字段） |
+| `backend/src/controllers/appControllers/olaController/chat.js` | 316-317 | 网页注入 `X-Ola-Acting-As` |
+| `backend/src/models/coreModels/Admin.js` | 39-55 | 可选字段模式参照 |
+| `backend/src/models/appModels/Client.js` | 21 | `assigned: ref Admin`（现成销售归属） |
+
+### nanobot 侧（`SeekMi-Technologies/Ola_bot` @ `ola-main`）
+
+| 文件 | 行 | 内容 |
+|---|---|---|
+| `bridge/src/index.ts` | 26-28 | 单 PORT / 单 AUTH_DIR / 单 TOKEN |
+| `bridge/src/server.ts` | 33 | 单 `wa: WhatsAppClient`（单租户） |
+| `bridge/src/server.ts` | 127-134 | `broadcast` 全员广播（无路由） |
+| `bridge/src/server.ts` | 44-56 | 绑 127.0.0.1 + 拒 Origin + 单 token |
+| `bridge/src/whatsapp.ts` | 3 | "Based on OpenClaw" |
+| `bridge/src/whatsapp.ts` | 94 | `syncFullHistory: false`（坑 2.3） |
+| `bridge/src/whatsapp.ts` | 106/138/141 | 仅订阅 connection/creds/messages，**无 contacts.\***（坑 2.1） |
+| `bridge/src/whatsapp.ts` | 116-130 | 固定 5s 重连，无 heartbeat/backoff（坑 2.4） |
+| `bridge/src/whatsapp.ts` | 176-185 | 入站 payload 只有 sender+pn，无 pushName/displayName（坑 2.1） |
+| `nanobot/channels/whatsapp.py` | 78 / 249-251 | `_lid_to_phone` 进程内 dict，重启丢（坑 2.2） |
+| `nanobot/channels/whatsapp.py` | 154-156 | Python 侧固定 5s 重连（坑 2.4） |
+| `nanobot/channels/whatsapp.py` | 279-289 | `_handle_message` metadata **缺 `_acting_as`**（核心缺口） |
+| `nanobot/channels/email.py` | 177 / 190-191 / 193-198 | email 解析 + 注入 `_acting_as`（正确参照） |
+| `nanobot/channels/email.py` | 267-345 | `_resolve_sender_acting_as` 走 `salesperson.lookup_by_email` |
+| `nanobot/agent/loop.py` | 683-685 | `_dispatch` 从 metadata 取 `_acting_as` → `set_acting_as` |
+| `nanobot/agent/tools/mcp.py` | 259-260 | `MCPClientPool` 按 acting_as bake `X-Acting-As`（多租户管道已建好） |
+| `nanobot/api/server.py` | 236 | 网页路径 `set_acting_as(X-Ola-Acting-As)` |
+| `nanobot/agent/admin_context.py` | — | acting_as contextvar 定义 |
