@@ -146,14 +146,17 @@
 ### 2.1 联系人自定义名字看不见
 
 - **现象**：销售在手机里给客户改了备注「老王 - 美的厨具」，但入站消息里只有 phone/JID，CRM 客户列表全是号码。
-- **Baileys 真相**：`pushName` 每条消息都带（对方自设的 profile name，非销售备注）；销售手机端的备注名要靠 `contacts.upsert` / `contacts.update` 事件同步，启动时 `contacts.set` 给一次快照。
+- **Baileys 真相（联网核实，2026-05）**：
+  - `pushName`（对方自设 profile 名）可以拿到：`contacts.update` 即使在普通账号也会带 `{ id, notify: "Maria Santos", verifiedName }`，`notify` 就是 pushName。
+  - **但销售自己在手机里给客户存的备注名（备注），靠 `contacts.upsert` 同步，issue #522 报告它可能只在 WhatsApp Business 账号触发**——普通账号未必拿得到。所以本坑要降低预期：**能显示对方 profile 名，但销售私人备注名在非 Business 账号上不保证**。
 - **现有代码定位**：
   - `whatsapp.ts` **完全没订阅 `contacts.*`**（只有 connection/creds/messages 三个事件，`whatsapp.ts:106/138/141`）。
   - 入站 payload（`whatsapp.ts:176-185`）只暴露 `sender`（`msg.key.remoteJid`）+ `pn`（`msg.key.remoteJidAlt`），**既无 pushName 也无 displayName**。
 - **多租户设计要点**：
-  1. bridge per-admin client 各自订阅 `contacts.upsert` + `contacts.update` + 启动 `contacts.set`。
-  2. 入站 payload 加 `displayName`，优先级 `contacts 备注名 > pushName > phone > LID`。
+  1. bridge 至少订阅 `contacts.update`（拿 pushName/notify）+ 每条 `messages.upsert` 取 `msg.pushName`；`contacts.upsert`（备注名）也订，但当作「Business 才有」的增强，不能依赖。
+  2. 入站 payload 加 `displayName`，优先级 `备注名(若有) > pushName > phone > LID`。
   3. per-admin 持久化 `jid → displayName`（§4.1 `state.json`），重启不丢。
+  4. 产品上：CRM 里允许销售**手动给 WA 联系人改名**（`source: manual`），作为拿不到备注名时的兜底——这条体验比死磕 Business 同步更实在。
 
 ### 2.2 超长号码（LID 长数字串）
 
@@ -163,34 +166,50 @@
   - `whatsapp.py:232-251` 已按 JID 后缀分类 phone/LID 并算 `sender_id`，fallback 链 `whatsapp.py:251`：`phone_id or self._lid_to_phone.get(lid_id) or lid_id or id_a or id_b`。
   - **但 `self._lid_to_phone` 是进程内 dict（`whatsapp.py:78`），只在「同一条消息里 phone 和 LID 同时出现」时才写入（`whatsapp.py:249-250`），且 bridge/进程重启全丢**——这正是前次踩的坑。
   - `whatsapp.py:281` 用 `chat_id=sender`（完整 LID）做回复地址。
+- **Baileys v7 真相（联网核实，2026-05）**：
+  - **策略要反过来**：官方明确「PN（电话号）越来越不可靠，程序应以 **LID 为稳定主键**，不要费劲还原成 PN」。所以不是"优先 phone、LID 兜底"，而是 **LID 当主键，phone 拿到当展示增强**。
+  - v7 **自带** LID 映射存储 `sock.signalRepository.lidMapping`：`getPNForLID` / `getLIDForPN` / `storeLIDPNMapping`，外加 `lid-mapping.update` 事件——**现有代码（手搓 `_lid_to_phone`）完全没用上**。
+  - LID 映射的初始下发依赖 `INITIAL_BOOTSTRAP` 历史同步——**这正是 §2.3 的 `syncFullHistory:false` bug 会顺带掐死的**（没 bootstrap = 永远拿不到 LID 映射）。所以坑 2.2 的根在坑 2.3。
+  - `lid-mapping.update` 本身也不完全可靠（issue #2263 报告某些场景不触发），社区共识是**自己累积一份 jid/lid 库**（issue #2259）。
 - **多租户设计要点**：
-  1. per-admin `state.json` 持久化 `lid → phone`，启动加载。
-  2. bridge 订 `contacts.set` 启动快照，bootstrap 一批 lid↔phone。
-  3. 显示层 fallback `displayName > phone > LID`，**LID 只做内部主键，永不直接展示给销售**。
-  4. CRM Client 绑定字段（§5.2）记 `wa_jid` + `wa_jid_kind`（phone/lid），将来拿到 phone 回填。
+  1. 用 Baileys 内建 `signalRepository.lidMapping`，**持久化到 per-admin `state.json`**（替代 `whatsapp.py:78` 手搓 dict），启动加载回灌。
+  2. 订阅 `lid-mapping.update` 事件增量更新，但不依赖它——messages.upsert 里同时见到 phone+LID 也要回填。
+  3. 先修 §2.3 的 `shouldSyncHistoryMessage`，让 `INITIAL_BOOTSTRAP` 下发初始 LID 映射。
+  4. CRM Client（§5.2）以 **LID 为 `wa_jid` 主键**，phone 作 `wa_phone` 展示增强，拿到再回填。
+  5. 显示层 fallback `displayName(备注/pushName) > phone > LID`，**LID 永不直接展示给销售**。
 
-### 2.3 Baileys 历史信息导入 API 不可靠
+### 2.3 历史同步：`syncFullHistory:false` 在 v7 是「静默丢消息」雷（🔴 P0 必修）
 
-- **现象**：销售期望看到接入前几个月的 WA 对话，但多设备协议下即使开 `syncFullHistory` 也只有最近 ~50 会话，且该 API 半年内多次 breaking。
-- **Baileys 真相**：历史回看是多设备协议本身的限制，开关救不了。
-- **现有代码定位**：`whatsapp.ts:94` — `syncFullHistory: false`（现状已关，是对的）。
+- **现象（原以为）**：销售期望看接入前的历史对话，多设备协议下即使开 `syncFullHistory` 也只有最近 ~50 会话。
+- **联网核实后的真相（远比想象严重）**：我们 bridge 锁的是 Baileys **`7.0.0-rc.9`**（`bridge/package.json`），`whatsapp.ts:94` 写了 `syncFullHistory: false` 且**没给 `shouldSyncHistoryMessage` 回调**。在 v7 里这会让 Baileys 把回调默认成 `() => false`，**拒绝所有同步类型**（INITIAL_BOOTSTRAP / RECENT / ON_DEMAND / FULL 全拒）。后果：连上显示 ✅ 但**消息收不到、LID 映射建不起来、群消息不到**。
+  - 实锤：**OpenClaw issue #14069**（我们 bridge 的上游，`whatsapp.ts:3`）+ hermes-agent #11951（同款 whatsapp bridge 架构）。
+  - bug 在 Baileys 源码 2026-01-22 已修，但**没发新 npm**，最新仍是我们锁的 `7.0.0-rc.9`——必须自己加回调。
+- **正确写法**（whatsapp.ts socket 配置）：
+  ```ts
+  syncFullHistory: false,
+  shouldSyncHistoryMessage: ({ syncType }) => syncType !== 2,  // 只拒 FULL(=2)，放行 BOOTSTRAP/RECENT/ON_DEMAND
+  ```
 - **多租户设计要点**：
-  1. `syncFullHistory: false` 保留。
-  2. 产品端明确文案：「Ola 接管后只处理**新对话**，历史在你手机里」（onboarding 扫码页写清）。
-  3. 不写依赖历史回看的功能；真要历史，走 nanobot message store 从启用起自累积。
+  1. **P0 必修**：加 `shouldSyncHistoryMessage` 回调。这是 WhatsApp 能不能收到消息的前提，也是坑 2.1/2.2 的根因 enabler。
+  2. 历史回看仍按多设备协议限制——产品文案明确「Ola 接管后只处理**新对话**，历史在你手机里」。
+  3. 真要历史走 nanobot message store 从启用起自累积，不依赖 Baileys 拉。
 
 ### 2.4 Bridge 连接不稳
 
 - **现象**：长跑后偶尔「不收消息但也不报 disconnect」（zombie）；或重连风暴；或固定 5s 重连撞 ws server 重启。
-- **Baileys 真相**：socket 的 `'close'` 事件不可靠，必须有应用层 staleness 检测。
+- **Baileys 真相（联网核实，2026-05）**：
+  - socket 的 `'close'` 事件不可靠，必须有应用层 staleness 检测。
+  - Baileys 自带 `keepAliveIntervalMs`（WS ping-pong 心跳）——**要配好它**，但它防不住 zombie connection，应用层 staleness 仍需要。
+  - ⚠️ v7 **不再发送已读 ACK**（WhatsApp 在封发 ACK 的号）——**别手动加已读回执 / `readMessages`**，有封号风险。
 - **现有代码定位**（两侧都是裸 5s，无 backoff/heartbeat）：
-  - bridge：`whatsapp.ts:116-130` — `connection === 'close'` 时固定 `setTimeout(reconnect, 5000)`，只靠 `reconnecting` 布尔防重入，**无 heartbeat、无 backoff、无 staleness 检测**。
+  - bridge：`whatsapp.ts:116-130` — `connection === 'close'` 时固定 `setTimeout(reconnect, 5000)`，只靠 `reconnecting` 布尔防重入，**无 heartbeat、无 backoff、无 staleness 检测**；makeWASocket 也没显式设 `keepAliveIntervalMs`（`whatsapp.ts:85-96`）。
   - Python：`whatsapp.py:154-156` — 连接异常后固定 `await asyncio.sleep(5)` 重连，**同样无 backoff**。
 - **多租户设计要点**：
-  1. heartbeat：每 30s 检查上次收消息时间，>90s 无 traffic 主动 reconnect（不等 close 事件）。
+  1. 显式设 `keepAliveIntervalMs`（如 30s），再叠加应用层 staleness：>90s 无 traffic 主动 reconnect。
   2. backoff：`5s → 15s → 45s → 120s`（cap），连上后 reset。
   3. 状态机扩 `reconnecting` / `stale_detected`，broadcast 给 Python → CRM → 前端。
   4. **per-admin 隔离**：一个销售的重连风暴不能拖累别人——单进程方案必须把每个 client 的事件 handler 用 try/catch 包在 client 边界内（符合 CLAUDE.md「无 silent error」：catch 里 log 具体 admin_id + 错误）。
+  5. ❌ 不加任何已读回执逻辑（封号）。
 
 ---
 
@@ -305,16 +324,18 @@
 3. 下游全自动跑通：`loop.py:684` 取 `_acting_as` → `set_acting_as` → `mcp.py:259-260` 把 `X-Acting-As` bake 进该 admin 的 transport → CRM `resolveActingAdmin`（`bootstrap.js:88+`）正确 scope。
 4. **不需要** email 那种 `salesperson.lookup_by_email`——WhatsApp 的销售身份来自 route，不是 sender。sender（客户 phone/LID）只用来匹配/创建 Client（`assigned` = 该 admin，§5.2）。
 
-### 4.5 contacts / pushName 持久化（解坑 2.1 + 2.2）
+### 4.5 contacts / LID 持久化（解坑 2.1 + 2.2）
+
+> **前提**：先做 §2.3 的 `shouldSyncHistoryMessage` 修复，否则 `INITIAL_BOOTSTRAP` 不下发，LID 映射和 contacts 都拿不到，本节全部白做。
 
 bridge per-admin client：
 
-1. 订阅 `contacts.set`（启动快照）+ `contacts.upsert` + `contacts.update` → 写 `state.json` 的 `contacts` + `lidToPhone`。
-2. 每条 `messages.upsert`（`whatsapp.ts:141`）取 `msg.pushName`，按优先级回填 `displayName`（不覆盖已有 contacts 备注）。
-3. 入站 payload（`whatsapp.ts:176-185`）加 `displayName` 字段（已算好），Python/CRM 不重复算。
+1. 用 Baileys v7 内建 `sock.signalRepository.lidMapping`（`getPNForLID`/`storeLIDPNMapping`），订阅 `lid-mapping.update` 事件增量更新，**持久化到 `state.json` 的 `lidToPhone`**（替代 `whatsapp.py:78` 手搓 dict），启动回灌。
+2. 订阅 `contacts.update`（拿 pushName/notify）；`contacts.upsert`（备注名，Business 才可靠）也订但不依赖。每条 `messages.upsert`（`whatsapp.ts:141`）取 `msg.pushName` 回填。
+3. 入站 payload（`whatsapp.ts:176-185`）加 `displayName` 字段（已按 `备注 > pushName > phone > LID` 算好）+ `lid` + `phone`，Python/CRM 不重复算。
 4. `state.json` 写盘 debounce（~5s），避免高频消息打爆磁盘。
 
-CRM 侧：Client 落 `wa_jid` + `wa_display_name`（§5.2），展示用 `wa_display_name`，匹配用 `wa_jid`。
+CRM 侧：Client 以 **LID 为 `wa_jid` 主键**（§5.2），`wa_phone` 作展示增强，展示名用 `wa_display_name`（拿不到时允许销售手动改名）。
 
 ### 4.6 connection robustness（解坑 2.4）
 
@@ -349,10 +370,12 @@ wa_phone_number: { type: String, default: null },  // 绑定后展示号码（E.
 ### 5.2 Client model（`backend/src/models/appModels/Client.js`）
 
 ```js
-wa_jid: { type: String, default: null, index: true },                 // 稳定主键：优先 E.164，退 LID
-wa_jid_kind: { type: String, enum: ['phone', 'lid'], default: null }, // 标明 wa_jid 类型（坑 2.2）
-wa_display_name: { type: String, default: null },                     // bridge 同步的备注名
+wa_jid: { type: String, default: null, index: true },   // 稳定主键 = LID（Baileys v7 官方建议以 LID 为准，PN 不可靠）
+wa_phone: { type: String, default: null },              // E.164，展示增强，拿到再回填（可能始终为空）
+wa_display_name: { type: String, default: null },       // 备注名/pushName，或销售手动设
 ```
+
+> LID 当主键的理由（联网核实）：Baileys v7 官方明确 PN 越来越不可靠、应以 LID 为稳定标识。初稿写的「phone 主键 + LID 兜底」是反的，已纠正。
 
 Client 已有 `assigned: { ref: 'Admin' }`（`Client.js:21`）——**现成的销售归属字段**。WA 入站匹配/创建 Client 时 `assigned` = acting_as 的 admin_id，多租户客户归属天然落这里。
 
@@ -366,12 +389,13 @@ Client 已有 `assigned: { ref: 'Admin' }`（`Client.js:21`）——**现成的�
 
 ### P0（上线 blocker）
 
+0. **🔴 `shouldSyncHistoryMessage` 修复**（§2.3）：`whatsapp.ts` socket 配置加 `shouldSyncHistoryMessage: ({syncType}) => syncType !== 2`。**这是「能不能收到消息」的前提**，也是坑 2.1/2.2 的根因 enabler。哪怕暂不做多租户，这条都该先修（现状是 v7 上静默丢消息的雷）。
 1. **bridge 多租户路由改造**：`server.ts` 单 `wa` → `Map<admin_id, WhatsAppClient>`，`/wa/<admin_id>` 路由（§4.2）。
 2. **per-admin authDir + state.json**（§4.1）。
 3. **acting_as 注入**（§4.4）：`WhatsAppChannel` 绑 admin_id，metadata 加 `_acting_as`。**多租户隔离的命门，一行的事但漏了就全员归 systemAdmin。**
-4. **contacts 持久化**（§4.5）→ 解坑 2.1 + 2.2。
-5. **heartbeat + backoff**（§4.6）→ 解坑 2.4。
-6. **CRM schema**（§5.1 + §5.2）。
+4. **LID/contacts 持久化**（§4.5）：用内建 `signalRepository.lidMapping` + 持久化 → 解坑 2.1 + 2.2。
+5. **keepAlive + staleness + backoff**（§4.6）→ 解坑 2.4。
+6. **CRM schema**（§5.1 + §5.2，`wa_jid` 以 LID 为主键）。
 7. **Onboarding UX**：QR 扫码页 + 状态展示（含坑 2.3「只接管新对话」文案）。
 
 ### P1（上线后迭代）
@@ -434,3 +458,18 @@ Client 已有 `assigned: { ref: 'Admin' }`（`Client.js:21`）——**现成的�
 | `nanobot/agent/tools/mcp.py` | 259-260 | `MCPClientPool` 按 acting_as bake `X-Acting-As`（多租户管道已建好） |
 | `nanobot/api/server.py` | 236 | 网页路径 `set_acting_as(X-Ola-Acting-As)` |
 | `nanobot/agent/admin_context.py` | — | acting_as contextvar 定义 |
+
+### Baileys 联网核实来源（2026-05）
+
+| 主题 | 来源 |
+|---|---|
+| `syncFullHistory:false` 在 v7 静默丢消息 | hermes-agent #11951、**OpenClaw #14069**（我们 bridge 的上游） |
+| 修复回调 `shouldSyncHistoryMessage: ({syncType}) => syncType !== 2` | 同上（已确认 OpenClaw + 直接 Baileys 用户验证） |
+| bug 已在 Baileys 源码修但未发新 npm（最新仍 `7.0.0-rc.9`） | WhiskeySockets/Baileys releases |
+| LID 为稳定主键、PN 不可靠；`signalRepository.lidMapping` / `getPNForLID` / `lid-mapping.update` | Baileys WhatsApp IDs 文档、issue #2259（自建 jid/lid 库）、#2263（lid-mapping.update 不触发） |
+| `contacts.upsert` 可能仅 Business 账号触发 | WhiskeySockets/Baileys #522 |
+| `contacts.update` 带 `notify`(pushName) 普通账号也有 | Baileys 社区文档 |
+| 群成员返回 @lid 而非 phone；退群断连 | #1505、#1935、#2233、#1226 |
+| v7 不再发已读 ACK（封号规避）；`keepAliveIntervalMs` | Baileys v7 迁移指南、配置文档 |
+
+> 验证依据：本 bridge 锁 `@whiskeysockets/baileys` 版本 `7.0.0-rc.9`（`bridge/package.json`），上述 v7 行为均适用。
