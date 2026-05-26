@@ -69,3 +69,25 @@ jobs:
 
       - name: Security audit (high/critical prod deps)
         run: npm audit --audit-level=high --omit=dev
+
+  docker-build:
+    name: Docker build smoke
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t ola-backend-ci ./backend
+
+      - name: Build frontend image
+        run: docker build -t ola-frontend-ci -f ./frontend/Dockerfile.prod ./frontend
+
+      - name: Stub backend/.env for compose validation
+        run: echo "# CI stub for docker compose config validation" > ./backend/.env
+
+      - name: Validate docker-compose syntax
+        run: docker compose config -q
+        env:
+          MCP_BIND_ADDR: 127.0.0.1
