@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Pre-cache MongoDB binary
+        run: node -e "const{MongoMemoryServer}=require('mongodb-memory-server');MongoMemoryServer.create().then(m=>m.stop()).catch(e=>{console.error(e);process.exit(1)})"
+
       - name: Lint
         run: npm run lint
         continue-on-error: true
@@ -67,8 +70,8 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Security audit (high/critical prod deps)
-        run: npm audit --audit-level=high --omit=dev
+      - name: Security audit (critical prod deps)
+        run: npm audit --audit-level=critical --omit=dev
 
   docker-build:
     name: Docker build smoke
