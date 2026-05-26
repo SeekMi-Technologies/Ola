@@ -2,7 +2,7 @@ import * as actionTypes from './types';
 import * as authActionTypes from '@/redux/auth/types';
 
 export const SUPPORTED = ['zh', 'en'];
-export const DEFAULT_LANG = 'zh';
+export const DEFAULT_LANG = 'en';
 
 const INITIAL_STATE = { current: DEFAULT_LANG };
 

@@ -18,6 +18,7 @@ import AuthModule from '@/modules/AuthModule';
 import Loading from '@/components/Loading';
 import { getCountryOptions } from '@/utils/countryOptions';
 import useLanguage from '@/locale/useLanguage';
+import LanguageToggle from '@/components/LanguageToggle';
 
 export default function Onboarding() {
   const translate = useLanguage();
@@ -209,6 +210,10 @@ export default function Onboarding() {
             </Form.Item>
           </div>
         </Form>
+
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <LanguageToggle variant="auth" />
+        </div>
       </Loading>
     );
   };

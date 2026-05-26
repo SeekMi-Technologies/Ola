@@ -505,7 +505,7 @@ const lang = {
   language_synced_locally_only_title: 'Language saved on this device only',
   language_synced_locally_only_desc:
     "Couldn't sync to server. Your language may reset on next login.",
-  switch_to_chinese: 'Switch to 中文',
+  switch_to_chinese: '切换成中文',
   switch_to_english: 'Switch to English',
 
   // G1 audit additions — keys called by translate() across the codebase that

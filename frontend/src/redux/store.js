@@ -3,7 +3,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import rootReducer from './rootReducer';
 import storePersist from './storePersist';
 import { LANG_STORAGE_KEY } from './lang/actions';
-import { SUPPORTED, DEFAULT_LANG } from './lang/reducer';
+import { SUPPORTED } from './lang/reducer';
 
 // localStorageHealthCheck();
 
@@ -39,7 +39,7 @@ const detectBrowserLang = () => {
   } catch (e) {
     // navigator unavailable (SSR / test env)
   }
-  return DEFAULT_LANG;
+  return 'en';
 };
 
 const adminLang = auth_state.current?.language;

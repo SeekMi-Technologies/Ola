@@ -13,6 +13,8 @@ import HeaderContent from '@/apps/Header/HeaderContainer';
 import PageLoader from '@/components/PageLoader';
 
 import { settingsAction } from '@/redux/settings/actions';
+import { setLangFromBrowser, LANG_STORAGE_KEY } from '@/redux/lang/actions';
+import { SUPPORTED } from '@/redux/lang/reducer';
 
 import { selectSettings } from '@/redux/settings/selectors';
 
@@ -55,6 +57,19 @@ export default function ErpCrmApp() {
       window.localStorage.setItem('firstVisit', JSON.stringify({ loadDefaultLang: true }));
     }
   }, [appSettings]);
+
+  useEffect(() => {
+    const handleLangChange = () => {
+      try {
+        if (window.localStorage.getItem(LANG_STORAGE_KEY)) return;
+      } catch (e) {}
+      const raw = (navigator.language || '').toLowerCase();
+      const lang = raw.startsWith('zh') ? 'zh' : raw.startsWith('en') ? 'en' : null;
+      if (lang && SUPPORTED.includes(lang)) dispatch(setLangFromBrowser(lang));
+    };
+    window.addEventListener('languagechange', handleLangChange);
+    return () => window.removeEventListener('languagechange', handleLangChange);
+  }, [dispatch]);
 
   const bypassAuth = import.meta.env.VITE_DEV_BYPASS_AUTH === 'true';
 
