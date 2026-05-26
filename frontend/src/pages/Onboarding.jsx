@@ -31,8 +31,8 @@ export default function Onboarding() {
   const navigate = useNavigate();
 
   const steps = [
-    { title: translate('About You'), icon: <UserOutlined /> },
-    { title: translate('Your Company'), icon: <BankOutlined /> },
+    { title: translate('about_you'), icon: <UserOutlined /> },
+    { title: translate('your_company'), icon: <BankOutlined /> },
   ];
 
   const handleNext = async () => {
@@ -61,7 +61,7 @@ export default function Onboarding() {
       });
 
       if (response.success) {
-        message.success(translate('Welcome to Ola!'));
+        message.success(translate('welcome_to_ola'));
 
         const auth_state = {
           current: response.result,
@@ -188,7 +188,7 @@ export default function Onboarding() {
               name="companyEmail"
               label={translate('Company Email')}
               rules={[
-                { type: 'email', message: 'Please enter a valid email' },
+                { type: 'email', message: translate('invalid_email_address') },
               ]}
             >
               <Input
@@ -204,7 +204,7 @@ export default function Onboarding() {
                   {translate('Back')}
                 </Button>
                 <Button type="primary" onClick={handleSubmit} loading={loading} size="large" style={{ flex: 2 }}>
-                  {translate('Complete Workspace')}
+                  {translate('complete_workspace')}
                 </Button>
               </div>
             </Form.Item>
@@ -218,7 +218,7 @@ export default function Onboarding() {
     );
   };
 
-  const title = currentStep === 0 ? translate('Welcome to Ola!') : translate('Almost there!');
+  const title = currentStep === 0 ? translate('welcome_to_ola') : translate('almost_there');
 
   return <AuthModule authContent={<FormContainer />} AUTH_TITLE={title} />;
 }
