@@ -146,7 +146,7 @@ export default function SettingsGeneral() {
                 name="company_country"
                 label={<span className="general-field-label">{translate('Country')}</span>}
                 className="general-field-group"
-                rules={[{ required: true, message: 'Company country is required' }]}
+                rules={[{ required: true, message: translate('please_select_your_country') }]}
               >
                 <Select
                   showSearch
