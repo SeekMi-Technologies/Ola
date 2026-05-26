@@ -12,3 +12,10 @@ export const setLang = (lang) => (dispatch) => {
   }
   dispatch({ type: actionTypes.LANG_SET, payload: lang });
 };
+
+// Browser-driven update — does NOT write to localStorage so the
+// "no ola_lang → follow browser" invariant is preserved across sessions.
+export const setLangFromBrowser = (lang) => (dispatch) => {
+  if (!SUPPORTED.includes(lang)) return;
+  dispatch({ type: actionTypes.LANG_SET, payload: lang });
+};

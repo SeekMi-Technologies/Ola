@@ -3,7 +3,7 @@ import { Form, Input, Button, Select, message } from 'antd';
 import { GlobalOutlined } from '@ant-design/icons';
 import { request } from '@/request';
 import Loading from '@/components/Loading';
-import { COUNTRY_OPTIONS } from '@/utils/countryOptions';
+import { getCountryOptions } from '@/utils/countryOptions';
 // === MVP-HIDDEN: Logo 上传功能本轮不实现 ===
 // import CompanyLogoField from '@/modules/SettingModule/components/CompanyLogoField';
 // === END MVP-HIDDEN ===
@@ -11,6 +11,7 @@ import useLanguage from '@/locale/useLanguage';
 
 export default function SettingsGeneral() {
   const translate = useLanguage();
+  const countryOptions = getCountryOptions(translate);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -89,7 +90,7 @@ export default function SettingsGeneral() {
                 name="company_name"
                 label={<span className="general-field-label">{translate('Company Name')}</span>}
                 className="general-field-group"
-                rules={[{ required: true, message: 'Company name is required' }]}
+                rules={[{ required: true, message: translate('company_name_is_required') }]}
               >
                 <Input className="general-field-input" size="large" placeholder={translate('Enter company name')} />
               </Form.Item>
@@ -145,13 +146,13 @@ export default function SettingsGeneral() {
                 name="company_country"
                 label={<span className="general-field-label">{translate('Country')}</span>}
                 className="general-field-group"
-                rules={[{ required: true, message: 'Company country is required' }]}
+                rules={[{ required: true, message: translate('please_select_your_country') }]}
               >
                 <Select
                   showSearch
                   placeholder={translate('Select your country')}
                   optionFilterProp="label"
-                  options={COUNTRY_OPTIONS}
+                  options={countryOptions}
                   size="large"
                   suffixIcon={<GlobalOutlined className="site-form-item-icon" />}
                   style={{ width: '100%' }}
