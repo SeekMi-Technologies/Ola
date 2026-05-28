@@ -6,6 +6,21 @@
 > section is intentionally complete and ordered so an agent can execute
 > it top-to-bottom without judgment calls.
 
+---
+
+## ⚠️ Two files you must create yourself — ask Yuandong for the content
+
+These two files are **gitignored and never committed**. You cannot get them from the repo — you must create them manually and ask **Yuandong (zyd)** for the content of both:
+
+| File | What to do |
+|---|---|
+| `backend/.env` | Copy `backend/.env.example` → `backend/.env`, then ask Yuandong to send you the real values for the 4 required keys (`DATABASE`, `JWT_SECRET`, `MCP_SERVICE_TOKEN`, `GEMINI_API_KEY`). |
+| `.secrets/SERVERS.env` | Create the folder and file yourself (`mkdir .secrets && touch .secrets/SERVERS.env`), then ask Yuandong to send you the full file content. This file holds all production server IPs, SSH credentials, and app secrets. |
+
+**Do not proceed with `start-dev.sh` until `backend/.env` is filled in.**
+
+---
+
 This directory makes **Ask Ola** behave as a real tool-calling agent (not a
 plain chat proxy). It contains:
 
@@ -23,10 +38,10 @@ locations** + **2 .env files**. The agent must understand all four to
 bootstrap correctly:
 
 ```
-~/dev/                              ← any directory; pick one and stick with it
-├── crm/                            ← THIS REPO (SeekMi-Technologies/Ola)
+<any parent dir>/                   ← pick any directory (e.g. ~/dev/ or ~/Desktop/)
+├── Ola/                            ← THIS REPO (SeekMi-Technologies/Ola)
 │   ├── backend/                    ← Node 20 / Express, MCP server
-│   │   ├── .env                    ← per-machine secrets, gitignored
+│   │   ├── .env                    ← per-machine secrets, gitignored — ⚠️⚠️⚠️ CREATE THIS YOURSELF ⚠️⚠️⚠️
 │   │   └── .env.example            ← template, commit ok
 │   ├── frontend/                   ← React 18 + Vite + Ant Design
 │   ├── ola/
@@ -34,10 +49,12 @@ bootstrap correctly:
 │   │   ├── nanobot.config.template.json   ← rendered into ~/.nanobot/config.json
 │   │   └── nanobot-workspace/      ← 5 .md files copied into ~/.nanobot/workspace/
 │   ├── .env                        ← project-root, only used by docker-compose
+│   ├── .secrets/                   ← ⚠️⚠️⚠️ CREATE THIS FOLDER YOURSELF ⚠️⚠️⚠️
+│   │   └── SERVERS.env             ← prod secrets + SSH creds — ⚠️⚠️⚠️ CREATE THIS FILE YOURSELF ⚠️⚠️⚠️
 │   ├── start-dev.sh                ← one-command launcher for the 4 services
 │   └── stop-dev.sh
 │
-└── nanobot/  (or  Ola_bot/)        ← MUST be a sibling of crm/
+└── Ola_bot/                        ← MUST be a sibling of Ola/
     └── NOTE: Use SeekMi-Technologies/Ola_bot, NOT upstream HKUDS/nanobot.
         Branch model:
           - `ola-dev`   : development cumulative — local dev runs from here
@@ -58,7 +75,7 @@ bootstrap correctly:
 
 **Hard rules** (will silently break if violated):
 - The two repos **must be siblings** at the same parent dir. `start-dev.sh`
-  resolves nanobot via `${CRM_DIR}/../nanobot/` or `${CRM_DIR}/../Ola_bot/`.
+  resolves nanobot via `${CRM_DIR}/../Ola_bot/` (or `../nanobot/` as fallback).
 - `~/.nanobot/` is in the user's home dir (not inside either repo). It
   persists across `git pull`s — your local agent memory + chat history
   outlive code updates.
@@ -100,6 +117,8 @@ that reverse-proxies `/api/*` to backend, plus 2 sibling boxes for nanobot
 brew install node@20 git
 # (Optional, only if Ask Ola interaction needed — wzh/yili usually skip)
 brew install python@3.11 uv
+# (Optional, only for sales-coach audio transcription — full-stack devs only)
+brew install ffmpeg
 
 # Verify:
 node --version    # → v20.x.x
@@ -207,6 +226,16 @@ bash stop-dev.sh
 
 Same as the wzh/yili 8-step quickstart above, plus:
 
+- **Step 1 — install `ffmpeg`** (`brew install ffmpeg`). Required for the
+  sales-coach audio transcription pipeline — `transcribe_audio` tool runs
+  `ffmpeg` to compress large recordings to mono 16k MP3 so they fit under
+  OpenAI's 25 MB upload cap. Without it, audio over 20 MB or any WAV/FLAC
+  input fails with a specific error from the tool.
+- **Step 3 — add `OPENAI_API_KEY` to `backend/.env`** (or
+  `.secrets/SERVERS.env`, see secrets section below). Required when
+  exercising sales-coach: nanobot's `OpenAITranscriptionProvider` reads it
+  from env. Get from
+  [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
 - **Step 4 IS required** — `.env` (project root) needs `MCP_BIND_ADDR=127.0.0.1`
   for local docker compose / prod-stack staging. Other engineers don't need
   to copy this from anywhere; just create the file with that one line:
@@ -345,6 +374,12 @@ Copy `backend/.env.example` to `backend/.env` and fill these four:
 | `MCP_SERVICE_TOKEN` | Loopback-only service token. Dev machines share the same value (ask zyd). Prod generates its own via `openssl rand -hex 32`. |
 | `GEMINI_API_KEY` | Personal key from [aistudio.google.com](https://aistudio.google.com) — do **not** share or commit. |
 
+**Sales-coach audio transcription** (full-stack only, optional for UI-only work):
+
+| Variable | Where to get it |
+|---|---|
+| `OPENAI_API_KEY` | Personal key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys). Required for `transcribe_audio` tool — used by sales-coach pipeline via `gpt-4o-transcribe-diarize`. Future GPT-5.5 fallback reuses the same key. |
+
 Optional: `GOTENBERG_URL`, `RESEND_API`, `ALLOWED_ORIGINS`
 (see `backend/.env.example`).
 
@@ -411,6 +446,54 @@ machine personalization, use `USER.md` (first-boot only, never clobbered).
   different value from dev.
 - **GEMINI_API_KEY**: rotate at [aistudio.google.com](https://aistudio.google.com),
   update `backend/.env`, restart. No other files to touch.
+- **OPENAI_API_KEY**: rotate at
+  [platform.openai.com/api-keys](https://platform.openai.com/api-keys),
+  update `.secrets/SERVERS.env` (canonical), propagate to Box2 (where nanobot
+  runs) via SSH `nano /root/<wherever .env lives> && systemctl restart nanobot`.
+  Production same single source-of-truth pattern as `MCP_SERVICE_TOKEN`.
+
+## Linux production install (Aliyun ECS)
+
+Box2 (the nanobot host) runs `python -m nanobot serve` directly under
+systemd/screen — **not** via the Dockerfile in the nanobot repo. So
+system dependencies must be installed on the host. For Ubuntu / Debian
+images (the standard Aliyun ECS choice for Python AI workloads):
+
+```bash
+# As root or via sudo. Use Aliyun's apt mirror for HK / China speed.
+apt-get update
+apt-get install -y --no-install-recommends \
+  ffmpeg \
+  python3.12 python3.12-venv python3-pip \
+  git curl ca-certificates
+
+# Verify ffmpeg
+ffmpeg -version | head -1   # → ffmpeg version 6.x or later
+which ffmpeg                # → /usr/bin/ffmpeg
+```
+
+For Alibaba Cloud Linux 3 / CentOS Stream / RHEL 9:
+
+```bash
+dnf install -y epel-release
+dnf install -y ffmpeg python3.12 python3.12-pip git curl
+# (ffmpeg sometimes requires RPM Fusion on RHEL 9 — `dnf install -y \
+#  https://download1.rpmfusion.org/free/el/rpmfusion-free-release-9.noarch.rpm`)
+```
+
+If you ever switch Box2 to running nanobot via Docker (using
+`nanobot/Dockerfile`), `ffmpeg` is already in the image — no host install
+needed.
+
+**Existing Box1/Box2 reality check** (run after onboarding a host):
+
+```bash
+ssh root@<box2-ip> 'ffmpeg -version | head -1 && python3 --version'
+```
+
+A missing `ffmpeg` will silently degrade sales-coach: short MP3 inputs
+under 20 MB still transcribe, but any WAV/FLAC or large file returns
+"file requires compression... ffmpeg is not installed on the host".
 
 ## What lives where (mental model)
 

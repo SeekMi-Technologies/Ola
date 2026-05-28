@@ -15,7 +15,7 @@ export default function RegisterForm() {
           rules={[
             {
               required: true,
-              message: 'Please input your first name!',
+              message: translate('please_input_your_first_name'),
             },
           ]}
           style={{ display: 'inline-block', width: 'calc(50% - 8px)' }}
@@ -46,11 +46,11 @@ export default function RegisterForm() {
         rules={[
           {
             required: true,
-            message: 'Please input your email!',
+            message: translate('please_input_your_email'),
           },
           {
             type: 'email',
-            message: 'Invalid email address!',
+            message: translate('invalid_email_address'),
           },
         ]}
       >
@@ -68,11 +68,11 @@ export default function RegisterForm() {
         rules={[
           {
             required: true,
-            message: 'Please input your password!',
+            message: translate('please_input_your_password'),
           },
           {
             min: 8,
-            message: 'Password must be at least 8 characters.',
+            message: translate('password_must_be_at_least_8_characters'),
           }
         ]}
       >
@@ -85,26 +85,26 @@ export default function RegisterForm() {
 
       <Form.Item
         name="confirmPassword"
-        label="Confirm Password"
+        label={translate('confirm_password')}
         dependencies={['password']}
         rules={[
           {
             required: true,
-            message: 'Please confirm your password!',
+            message: translate('please_confirm_your_password'),
           },
           ({ getFieldValue }) => ({
             validator(_, value) {
               if (!value || getFieldValue('password') === value) {
                 return Promise.resolve();
               }
-              return Promise.reject(new Error('The two passwords that you entered do not match!'));
+              return Promise.reject(new Error(translate('passwords_do_not_match')));
             },
           }),
         ]}
       >
         <Input.Password
           prefix={<LockOutlined className="site-form-item-icon" />}
-          placeholder="Confirm Password"
+          placeholder={translate('confirm_password')}
           size="large"
         />
       </Form.Item>

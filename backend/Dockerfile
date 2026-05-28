@@ -2,10 +2,14 @@ FROM node:20-alpine
 
 WORKDIR /usr/src/app
 
-# 安装中文字体，用于Gotenberg渲染PDF中的中文
+# 安装系统 deps:
+# - font-noto / font-noto-cjk: Gotenberg 渲染 PDF 中文
+# - ffmpeg: transcriptionWorker.js 把 >20MB 的音频压缩成 mono 16k MP3
+#   以 fit OpenAI gpt-4o-transcribe 的 25MB 上限 (#249 audio pipeline)
 RUN apk update && apk add --no-cache \
     font-noto \
-    font-noto-cjk
+    font-noto-cjk \
+    ffmpeg
 
 # 使用阿里云npm镜像
 RUN npm config set registry https://registry.npmmirror.com && \

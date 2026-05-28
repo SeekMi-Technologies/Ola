@@ -35,9 +35,16 @@ const BLOCK_MAP = {
 export default function MessageBubble({ message }) {
   const { role, blocks } = message;
   const isUser = role === 'user';
+  const isSystem = role === 'system';
+
+  const roleClass = isUser
+    ? 'askola-message--user'
+    : isSystem
+      ? 'askola-message--system'
+      : 'askola-message--assistant';
 
   return (
-    <div className={`askola-message ${isUser ? 'askola-message--user' : 'askola-message--assistant'}`}>
+    <div className={`askola-message ${roleClass}`}>
       <div className="askola-message-blocks">
         {blocks.map((block, i) => {
           const renderer = BLOCK_MAP[block.type];

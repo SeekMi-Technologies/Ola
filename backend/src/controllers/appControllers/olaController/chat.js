@@ -4,12 +4,16 @@ const { v4: uuidv4 } = require('uuid');
 const { toolEventsToBlocks } = require('./toolResultToBlocks');
 const { labelFor, STAGE_LABELS } = require('./thinkingLabels');
 const recordUsage = require('@/controllers/appControllers/llmUsageController/recordUsage');
+const { collapseJobStatus } = require('@/utils/collapseJobStatus');
 
 const ChatSession = mongoose.model('ChatSession');
 const ChatMessage = mongoose.model('ChatMessage');
+const FileModel = mongoose.model('File');
+const JobModel = mongoose.model('Job');
 
-// Read env at request time so tests / hot-reload can override per call.
-const NANOBOT_TIMEOUT_MS = 120000;
+// 900s default accommodates agent loops with multiple MCP tool calls.
+const NANOBOT_TIMEOUT_MS =
+  parseInt(process.env.NANOBOT_TIMEOUT_MS, 10) || 900000;
 function nanobotEndpoint() {
   return {
     host: process.env.NANOBOT_HOST || '127.0.0.1',
@@ -79,14 +83,27 @@ function generateTitle(session, messages, userId) {
     .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
     .join('\n');
   const prompt = `Based on this conversation, generate a short title (max 6 words, no quotes, no punctuation at the end). Reply with ONLY the title, nothing else.\n\n${conversation}`;
-  const payload = JSON.stringify({ messages: [{ role: 'user', content: prompt }] });
+  // Scope the autoTitle request to its own session_id so the conversation
+  // text embedded in `prompt` doesn't leak into the global api_default.jsonl
+  // (multi-tenant isolation; pre-Plan-B-v3 bug — fixed phase C).
+  const payload = JSON.stringify({
+    messages: [{ role: 'user', content: prompt }],
+    session_id: `${session.nanobotSessionId}:autotitle`,
+  });
   const { host, port } = nanobotEndpoint();
   const options = {
     hostname: host,
     port,
     path: '/v1/chat/completions',
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload),
+      // Mirrors main chat path (#185). Without this nanobot routes the autotitle
+      // subagent's jsonl to admins/_system/sessions/ — leaking conversation text
+      // (which is embedded in the prompt) across the multi-tenant boundary.
+      'X-Ola-Acting-As': userId.toString(),
+    },
     timeout: 30000,
   };
   const titleStartTs = Date.now();
@@ -133,6 +150,40 @@ function generateTitle(session, messages, userId) {
   titleReq.end();
 }
 
+// ---------------------------------------------------------------------------
+// fileIds validation + hint construction
+// ---------------------------------------------------------------------------
+// Validates each fileId belongs to the acting admin and is not removed, then
+// collapses Job.status to the agent-facing vocabulary (ready/processing/done/
+// failed) via collapseJobStatus. Returns either {ok:true, fileRefs} (array of
+// `id=X name="Y" status="Z"` strings to splice into the user hint), or
+// {ok:false, status, message} for the controller to short-circuit on.
+// ---------------------------------------------------------------------------
+
+async function validateAndCollapseFileRefs(fileIds, userId) {
+  const fileRefs = [];
+  for (const fid of fileIds) {
+    if (typeof fid !== 'string' || !mongoose.isValidObjectId(fid)) {
+      return { ok: false, status: 404, message: '文件不存在或无权访问' };
+    }
+    const file = await FileModel.findOne({
+      _id: fid,
+      createdBy: userId,
+      removed: false,
+    });
+    if (!file) {
+      return { ok: false, status: 404, message: '文件不存在或无权访问' };
+    }
+    let job = null;
+    if (file.transcriptionJobId) {
+      job = await JobModel.findById(file.transcriptionJobId).select('status').lean();
+    }
+    const status = collapseJobStatus(job);
+    fileRefs.push(`id=${file._id} name="${file.originalName}" status="${status}"`);
+  }
+  return { ok: true, fileRefs };
+}
+
 function maybeAutoTitle(session, userMessage, assistantContent, userId) {
   if (session.title !== 'New Chat') return;
   ChatMessage.countDocuments({ sessionId: session._id, removed: false })
@@ -154,13 +205,25 @@ function maybeAutoTitle(session, userMessage, assistantContent, userId) {
 // ---------------------------------------------------------------------------
 
 const chat = async (req, res) => {
-  const { message, sessionId } = req.body;
+  const { message, sessionId, fileIds = [] } = req.body;
 
   if (!message || typeof message !== 'string' || message.trim() === '') {
     return res.status(400).json({
       success: false,
       result: null,
       message: 'message 字段为必填项，且不能为空字符串',
+    });
+  }
+
+  console.log(
+    `[askola.chat] admin=${req.admin._id} session=${sessionId || 'new'} msg_len=${message.length} fileIds=${Array.isArray(fileIds) ? fileIds.length : 'INVALID'}`
+  );
+
+  if (!Array.isArray(fileIds)) {
+    return res.status(400).json({
+      success: false,
+      result: null,
+      message: 'fileIds 必须是 string 数组',
     });
   }
 
@@ -180,6 +243,19 @@ const chat = async (req, res) => {
     const nanobotSessionId = `user:${userId}:conv:${uuidv4()}`;
     session = await ChatSession.create({ userId, nanobotSessionId, createdBy: userId });
   }
+
+  // Plan B v3: chat.js is hint-only — validate ownership, collapse status,
+  // emit `[available files: ...]` preface. Transcript fetch + status probe
+  // happen via MCP file.* tools (agent-driven, SOUL.md doctrine).
+  const fileValidation = await validateAndCollapseFileRefs(fileIds, userId);
+  if (!fileValidation.ok) {
+    return res.status(fileValidation.status).json({
+      success: false,
+      result: null,
+      message: fileValidation.message,
+    });
+  }
+  const fileRefs = fileValidation.fileRefs;
 
   // Switch to SSE mode.
   res.status(200);
@@ -210,7 +286,16 @@ const chat = async (req, res) => {
   // (line ~252) intentionally stores the RAW user text without the directive
   // so the chat history UI never displays the marker.
   const sessionLang = req.admin?.language === 'en' ? 'en' : 'zh';
-  const directedContent = `[SESSION_LANG=${sessionLang}]\n\n${message.trim()}`;
+  const availableFilesHint =
+    fileRefs.length > 0
+      ? [`[available files for tool calls: ${fileRefs.join(', ')}]`]
+      : [];
+  const directedContent = [
+    `[SESSION_LANG=${sessionLang}]`,
+    ...availableFilesHint,
+    '',
+    message.trim(),
+  ].join('\n');
 
   const proxyPayload = JSON.stringify({
     messages: [{ role: 'user', content: directedContent }],

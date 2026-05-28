@@ -24,7 +24,10 @@ echo "=== Ola CRM Dev Startup ==="
 echo ""
 
 # Kill any existing processes on our ports
-for PORT in 8888 8889 8900 3000; do
+# 8901 (nanobot gateway) included after Plan B v3 phase G — old gateway
+# instances from previous start-dev.sh runs held 8901, causing new gateway
+# spawn to crash with EADDRINUSE while serve/backend silently restarted.
+for PORT in 8888 8889 8900 8901 3000; do
   PID=$(lsof -ti:$PORT 2>/dev/null || true)
   if [ -n "$PID" ]; then
     echo -e "${YELLOW}Killing existing process on port $PORT (PID: $PID)${NC}"
@@ -51,6 +54,18 @@ if [ -f "$CRM_DIR/.secrets/SERVERS.env" ]; then
   source "$CRM_DIR/.secrets/SERVERS.env"
 fi
 set +a
+
+# #266 Item 3 — fail-fast if backend/.env declares OLA_ENV=prod. Local dev
+# must never point at the production Atlas cluster: cross-env writes pollute
+# the shared DB with host-specific paths and other dev artifacts (see #266
+# Bug 3+4 for the original incident). Prod boxes set OLA_ENV=prod in their
+# .env; local dev leaves it unset OR sets =dev.
+if [ "${OLA_ENV:-dev}" = "prod" ]; then
+  echo -e "${RED}REFUSING TO START: backend/.env has OLA_ENV=prod.${NC}"
+  echo -e "${YELLOW}start-dev.sh is for local development only. Set OLA_ENV=dev (or unset it)${NC}"
+  echo -e "${YELLOW}in backend/.env before running this script. See #266 for context.${NC}"
+  exit 1
+fi
 
 # Always-overwrite render of ~/.nanobot/config.json. Single source of truth
 # is the vendored template + secrets; manual edits to ~/.nanobot/config.json

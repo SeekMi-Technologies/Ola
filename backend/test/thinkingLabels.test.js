@@ -21,6 +21,8 @@ describe('thinkingLabels — TOOL_LABELS dictionary', () => {
       // Forward-looking: tools live on ZYD_FEAT, will activate when merged to dev
       'quote.generate_pdf_url',
       'salesperson.lookup_by_email',
+      // File / transcript (Plan B v3 phase D)
+      'file.search', 'file.get_transcript', 'file.transcription_status',
     ];
     expect(Object.keys(TOOL_LABELS).sort()).toEqual(expected.sort());
   });
@@ -28,6 +30,10 @@ describe('thinkingLabels — TOOL_LABELS dictionary', () => {
   test('forward-looking entries resolve to specific labels (not __unknown__ fallback)', () => {
     expect(labelFor('mcp_ola_crm_quote.generate_pdf_url')).toBe('Ola is preparing the PDF link...');
     expect(labelFor('mcp_ola_crm_salesperson.lookup_by_email')).toBe('Ola is identifying the salesperson...');
+  });
+
+  test('transcribe_audio is unregistered — falls back to tool-name-aware label', () => {
+    expect(labelFor('transcribe_audio')).toBe('Ola is calling transcribe_audio...');
   });
 
   test('does NOT include health.ping (it is in SKIP_TOOLS)', () => {
@@ -87,13 +93,13 @@ describe('thinkingLabels — labelFor()', () => {
     expect(labelFor('mcp_ola_crm_health.ping')).toBeNull();
   });
 
-  test('falls back to __unknown__ for unregistered tools', () => {
-    expect(labelFor('compute.profitMargin')).toBe('Ola is working on it...');
-    expect(labelFor('mcp_ola_crm_factory.list')).toBe('Ola is working on it...');
-    expect(labelFor('totally_made_up_tool')).toBe('Ola is working on it...');
+  test('falls back to tool-name-aware label for unregistered tools (Plan B v3 phase D)', () => {
+    expect(labelFor('compute.profitMargin')).toBe('Ola is calling compute.profitMargin...');
+    expect(labelFor('mcp_ola_crm_factory.list')).toBe('Ola is calling factory.list...');
+    expect(labelFor('totally_made_up_tool')).toBe('Ola is calling totally_made_up_tool...');
   });
 
-  test('falls back to __unknown__ for empty / non-string input', () => {
+  test('falls back to __unknown__ stage label for empty / non-string input', () => {
     expect(labelFor('')).toBe('Ola is working on it...');
     expect(labelFor(null)).toBe('Ola is working on it...');
     expect(labelFor(undefined)).toBe('Ola is working on it...');

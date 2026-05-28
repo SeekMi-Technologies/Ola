@@ -11,6 +11,36 @@ The current version is shown inside the product under **Settings → sidebar foo
 
 ---
 
+## v1.7.0 — 2026-05-20
+
+**Voice goes into the Lead-to-Quote loop.**
+
+- **Drop a sales call into Ask Ola.** Upload an audio recording in the Ask Ola composer — Ola transcribes it in the background and brings the transcript into the conversation. Ask "what did the customer push back on?" or "how should I close this deal?" and Ola answers from the actual call.
+- **A Files page for every recording.** Past uploads now live at `/file` — see transcription status, re-open transcripts in a side drawer, and search past calls without re-uploading.
+- **Per-salesperson safety.** Each salesperson's conversation history, uploaded files, and Ola's memory are scoped to their account — even when a team shares the same Ola.
+
+**语音也进入 Lead-to-Quote 流程了。**
+
+- **把销售通话拖进 Ask Ola。** 在 Ask Ola 输入框上传录音，Ola 后台自动转写并把内容带进对话。可以问「客户最担心什么」「这单怎么 close」，Ola 直接基于真实通话回答。
+- **Files 页统一管所有录音。** `/file` 显示每条录音的转写状态，可以侧拉抽屉看 transcript，也能搜历史通话，不用重传。
+- **每个销售各管各的数据。** 每个销售的对话历史、上传文件、Ola 的记忆都在自己账号范围里 — 团队共用 Ola 也不会串号。
+
+---
+
+## v1.6.0 — 2026-05-12
+
+**Bilingual, complete.**
+
+- **English and 中文 across the entire product.** Settings, Profile, Onboarding, Ask Ola, Merchandise, Factory — every page now switches language cleanly with the salesperson's preference, finishing the bilingual promise from v1.4.
+- **Language toggle in one place.** A new language switch lives in the header — flip it once and the whole product follows.
+
+**双语支持，全产品完成。**
+
+- **中英双语覆盖所有页面。** Settings、Profile、Onboarding、Ask Ola、商品、工厂 — 每个页面都按销售本人的语言偏好切换，把 v1.4 的双语承诺补完了。
+- **顶部统一切换。** 顶部新加语言切换 — 切一次，整个产品跟着走。
+
+---
+
 ## v1.5.0 — 2026-05-06
 
 **Email becomes a Lead-to-Quote channel.**

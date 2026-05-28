@@ -265,7 +265,7 @@ describe('chat — SSE pass-through (frame translation)', () => {
     expect(thinkFrames).toHaveLength(0);
   });
 
-  test('unknown tool → fallback "Working on it..." label', async () => {
+  test('unknown tool → tool-name-aware fallback label (Plan B v3 phase D)', async () => {
     nanoBotResponder = (_req, res) => {
       startSSE(res);
       res.write(nanoToolEvent({
@@ -282,7 +282,7 @@ describe('chat — SSE pass-through (frame translation)', () => {
     const res = await request(app).post('/api/ola/chat').send({ message: 'hi' });
     const thinkFrames = parseClientSSE(res.text).filter((f) => f.event === 'thinking_step');
     expect(thinkFrames).toHaveLength(1);
-    expect(thinkFrames[0].data.label).toBe('Ola is working on it...');
+    expect(thinkFrames[0].data.label).toBe('Ola is calling compute.profitMargin...');
   });
 });
 

@@ -9,6 +9,7 @@ const coreAuthRouter = require('./routes/coreRoutes/coreAuth');
 const coreApiRouter = require('./routes/coreRoutes/coreApi');
 const coreDownloadRouter = require('./routes/coreRoutes/coreDownloadRouter');
 const corePublicRouter = require('./routes/coreRoutes/corePublicRouter');
+const corePublicAudioRouter = require('./routes/coreRoutes/corePublicAudioRouter');
 const adminAuth = require('./controllers/coreControllers/adminAuth');
 const trackActivity = require('./middlewares/trackActivity');
 const exportRoutes = require('./routes/exportRoutes');
@@ -105,6 +106,10 @@ app.use('/api', coreAuthRouter);
 app.use('/api', adminAuth.isValidAuthToken, trackActivity, coreApiRouter);
 app.use('/api', adminAuth.isValidAuthToken, trackActivity, erpApiRouter);
 app.use('/download', coreDownloadRouter);
+// #257 — must mount BEFORE corePublicRouter; both share /public prefix but
+// corePublicAudioRouter serves UPLOADS_DIR audio for STT pull (no auth, UUID
+// in path is the secret), corePublicRouter serves backend/src/public/ static.
+app.use('/public/audio', corePublicAudioRouter);
 app.use('/public', corePublicRouter);
 // Excel 导出路由 - 不需要身份验证
 app.use('/export/excel', exportRoutes);

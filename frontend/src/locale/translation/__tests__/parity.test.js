@@ -34,6 +34,7 @@ describe('translation dict parity (en ↔ zh)', () => {
     const ALLOWED = new Set([
       'TRSell + TTB - TExp',   // math formula (Expected Gross Profit)
       'EGP / TRSell',          // math formula (Expected GP Margin)
+      'file_kind_pdf',         // brand acronym, universally PDF in both languages
     ]);
     const stillEnglish = Object.keys(en).filter(
       (k) => !ALLOWED.has(k) && zh[k] === en[k]

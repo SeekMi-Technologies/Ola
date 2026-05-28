@@ -108,8 +108,36 @@ export default function AskOla() {
     setMessages([]);
   };
 
+  // Fired by ChatInput when an attached file finishes transcription
+  // (or hits dedup — already-transcribed). Drops a system message into the
+  // chat panel so the user sees confirmation before sending their question.
+  const handleTranscriptionComplete = ({ fileId, originalName, durationMs, sidecarBytes, deduped }) => {
+    const seconds = durationMs ? Math.round(durationMs / 1000) : null;
+    const sizeKb = sidecarBytes ? (sidecarBytes / 1024).toFixed(1) : null;
+    const detail = [
+      seconds !== null ? `${seconds}s` : null,
+      sizeKb !== null ? `${sizeKb}KB transcript` : null,
+    ].filter(Boolean).join(' · ');
+    const text = deduped
+      ? translate('Recording "{name}" already transcribed (reused from earlier upload). You can ask me about it now.')
+          .replace('{name}', originalName)
+      : translate('Recording "{name}" transcription complete{detail}. You can ask me about it now.')
+          .replace('{name}', originalName)
+          .replace('{detail}', detail ? ` (${detail})` : '');
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg_system_${fileId}_${Date.now()}`,
+        role: 'system',
+        timestamp: new Date().toISOString(),
+        blocks: [{ type: 'text', content: text }],
+      },
+    ]);
+  };
+
   const handleSend = async (messageContent) => {
     const text = messageContent.text;
+    const fileIds = Array.isArray(messageContent.attachments) ? messageContent.attachments : [];
 
     // Cancel any previous in-flight stream defensively (e.g. user spam-clicks
     // send before the previous turn finishes).
@@ -131,6 +159,7 @@ export default function AskOla() {
     try {
       const body = { message: text };
       if (activeSessionId) body.sessionId = activeSessionId;
+      if (fileIds.length > 0) body.fileIds = fileIds;
 
       // EventSource doesn't support POST bodies, so we use fetch + manual SSE
       // parsing. Same approach the OpenAI / Anthropic / Google JS SDKs use.
@@ -236,7 +265,11 @@ export default function AskOla() {
             <h1 className="askola-chat-greeting">{translate('What can I do for you?')}</h1>
           </div>
           <div className="askola-chat-input-wrapper">
-            <ChatInput onSend={handleSend} disabled={loading} />
+            <ChatInput
+              onSend={handleSend}
+              onTranscriptionComplete={handleTranscriptionComplete}
+              disabled={loading}
+            />
           </div>
         </div>
       ) : (
@@ -261,7 +294,11 @@ export default function AskOla() {
           </div>
 
           <div className="askola-chat-input-wrapper">
-            <ChatInput onSend={handleSend} disabled={loading} />
+            <ChatInput
+              onSend={handleSend}
+              onTranscriptionComplete={handleTranscriptionComplete}
+              disabled={loading}
+            />
           </div>
         </>
       )}

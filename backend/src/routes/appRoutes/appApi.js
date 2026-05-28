@@ -27,6 +27,10 @@ const routerApp = (entity, controller) => {
   if (entity === 'invoice' || entity === 'quote' || entity === 'purchaseorder') {
     router.route(`/${entity}/copy/:id`).get(catchErrors(controller['copy']));
   }
+
+  if (entity === 'file') {
+    router.route(`/${entity}/transcript/:id`).get(catchErrors(controller['getTranscript']));
+  }
 };
 
 routesList.forEach(({ entity, controllerName }) => {

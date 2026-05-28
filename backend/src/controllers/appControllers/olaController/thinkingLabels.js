@@ -40,6 +40,11 @@ const TOOL_LABELS = {
 
   // Salesperson (system-scope; mainly invoked by email channel)
   'salesperson.lookup_by_email': 'Ola is identifying the salesperson...',
+
+  // File / transcript (Plan B v3 phase D — agent-driven MCP fetch)
+  'file.search':                'Ola is searching your files...',
+  'file.get_transcript':        'Ola is reading the transcript...',
+  'file.transcription_status':  'Ola is checking transcription status...',
 };
 
 // Tools that should NOT surface a thinking step to the end user.
@@ -59,14 +64,16 @@ const STAGE_LABELS = {
 
 // Resolve a NanoBot tool event name (with or without mcp_ola_crm_ prefix)
 // to the user-facing label. Returns null for skip-list tools (caller should
-// suppress the SSE thinking_step entirely). Falls back to STAGE_LABELS.__unknown__
-// for tools we haven't registered yet — keeps the panel informative without
-// breaking when new MCP tools land.
+// suppress the SSE thinking_step entirely). Falls back to a tool-name-aware
+// label like "Ola is calling <tool>..." so the user (and dev console) can
+// see which unregistered tool is firing — beats the old opaque
+// "Ola is working on it...".
 function labelFor(toolName) {
   const raw = rawToolName(toolName);
   if (!raw) return STAGE_LABELS.__unknown__;
   if (SKIP_TOOLS.has(raw)) return null;
-  return TOOL_LABELS[raw] || STAGE_LABELS.__unknown__;
+  if (TOOL_LABELS[raw]) return TOOL_LABELS[raw];
+  return `Ola is calling ${raw}...`;
 }
 
 module.exports = {

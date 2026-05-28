@@ -619,3 +619,122 @@
   margin: 0;
   padding: 0;
 }
+
+/* ===== Pending file chip (Plan B v3 phase E) ===== */
+
+.askola-pending-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin: 8px 0;
+  background: #fafafa;
+  border: 1px solid #d9d9d9;
+  border-radius: 16px;
+  font-size: 13px;
+  color: #595959;
+}
+
+.askola-pending-file-chip--uploading,
+.askola-pending-file-chip--transcribing {
+  border-color: #91caff;
+  background: #e6f4ff;
+}
+
+.askola-pending-file-chip--ready {
+  border-color: #b7eb8f;
+  background: #f6ffed;
+}
+
+.askola-pending-file-chip--failed {
+  border-color: #ffa39e;
+  background: #fff1f0;
+}
+
+.askola-pending-file-icon {
+  color: #8c8c8c;
+}
+
+.askola-pending-file-name {
+  font-weight: 500;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.askola-pending-file-status {
+  color: #8c8c8c;
+  font-size: 12px;
+}
+
+.askola-pending-file-preview-btn {
+  background: transparent;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: #595959;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.askola-pending-file-preview-btn:hover {
+  background: #f0f0f0;
+}
+
+.askola-pending-file-remove {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #8c8c8c;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.askola-pending-file-remove:hover {
+  color: #ff4d4f;
+}
+
+.askola-pending-file-transcript-preview {
+  margin: 4px 0 12px;
+  padding: 12px 16px;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.askola-transcript-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #262626;
+}
+
+/* ===== System messages (Plan B v3 phase E — transcription notification) ===== */
+
+.askola-message--system {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.askola-message--system .askola-message-blocks {
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 8px;
+  padding: 8px 14px;
+  color: #874d00;
+  font-size: 12px;
+  max-width: 80%;
+  text-align: center;
+}

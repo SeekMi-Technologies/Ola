@@ -29,6 +29,13 @@ services:
     volumes:
       # 上传文件持久化，避免 docker compose up -d --build 每次擦掉 logo 等资产
       - crm-uploads:/usr/src/app/src/public/uploads
+      # 音频文件 + transcript sidecar 持久化，并和 mcp 容器共享（#266 Bug 1+2）。
+      # 路径必须和 backend/src/controllers/appControllers/fileController/upload.js
+      # 里 UPLOADS_DIR 默认值（`path.resolve(__dirname, '../../../../uploads')` →
+      # `/usr/src/app/uploads`）一致。MCP 的 file.get_transcript 通过 in-process
+      # controllerAdapter 调 fileController.getTranscript，跑在 mcp 容器里 fs，
+      # 因此 mcp 必须挂同一个 named volume 才能读到 backend 写入的 sidecar .txt。
+      - crm-audio-uploads:/usr/src/app/uploads
     restart: unless-stopped
 
   # MCP server 独立容器（与 backend 同镜像，command 覆盖入口），
@@ -51,6 +58,9 @@ services:
       NODE_ENV: production
       # 容器内部绑 0.0.0.0，由上面的 ports 映射决定对外暴露哪个宿主接口
       MCP_HOST: "0.0.0.0"
+    volumes:
+      # 与 backend 共享 audio uploads volume — 见上方 backend.volumes 注释
+      - crm-audio-uploads:/usr/src/app/uploads
     restart: unless-stopped
 
   frontend:
@@ -70,6 +80,7 @@ services:
 
 volumes:
   crm-uploads:
+  crm-audio-uploads:
 
 # 注意：
 # - gotenberg 不再在本 compose 中，它在 Box3 独立运行

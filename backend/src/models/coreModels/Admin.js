@@ -41,6 +41,19 @@ const adminSchema = new Schema({
   // 'zh' via `|| 'zh'`. No migration needed.
   language: { type: String, enum: ['zh', 'en'], default: 'zh' },
 
+  // Per-admin STT engine selection (#257). null = fall back to env
+  // TRANSCRIPTION_PROVIDER or hardcoded 'openai'. paraformer = DashScope
+  // Paraformer-v2 (HK Cantonese first-class + 9× cheaper). Existing docs
+  // without this field read null and route to openai unchanged.
+  transcribeProvider: {
+    type: String,
+    enum: ['openai', 'paraformer'],
+    // null = fall back to TRANSCRIPTION_PROVIDER env, then to 'openai'.
+    // Mongoose bypasses enum validation for null/undefined, which is the
+    // sentinel we rely on — do NOT add null to the enum list.
+    default: null,
+  },
+
   // Updated by trackActivity middleware (≥60s throttle); read by Ola_devboard.
   lastActivity: { type: Date, default: null, index: true },
 
