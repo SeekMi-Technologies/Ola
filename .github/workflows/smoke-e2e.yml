@@ -93,7 +93,7 @@ jobs:
 
           # 4. Cookie auth propagates → authed resource returns a success envelope.
           AUTH_RESP=$(curl -s -b /tmp/jar "$BASE/api/setting/listAll")
-          echo "$AUTH_RESP" | grep -q '"success"' || { echo "FAIL 4: cookie auth not propagating: $AUTH_RESP"; exit 1; }
+          echo "$AUTH_RESP" | grep -q '"success":true' || { echo "FAIL 4: cookie auth not propagating: $AUTH_RESP"; exit 1; }
           echo "PASS 4: cookie auth propagates"
 
           echo "✅ all smoke assertions passed"
