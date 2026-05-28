@@ -9,7 +9,7 @@ on:
   pull_request:
     branches: [dev, main]
   push:
-    branches: [CICD, dev, main]
+    branches: [dev, main]
 
 # Cancel an in-flight run when a new commit lands on the same ref.
 concurrency:
