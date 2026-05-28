@@ -14,6 +14,7 @@
 const mongoose = require('mongoose');
 const { globSync } = require('glob');
 const path = require('path');
+const { mongoConnectOptions } = require('@/utils/dbOptions');
 
 let systemAdmin = null;
 
@@ -45,13 +46,8 @@ async function connectMongo() {
   if (!process.env.DATABASE) {
     throw new Error('[mcp bootstrap] DATABASE env not set');
   }
-  await mongoose.connect(process.env.DATABASE, {
-    tls: true,
-    tlsAllowInvalidCertificates: true,
-    serverSelectionTimeoutMS: 30000,
-    socketTimeoutMS: 45000,
-    family: 4,
-  });
+  // TLS is conditional (srv → on, plain → off); see @/utils/dbOptions.
+  await mongoose.connect(process.env.DATABASE, mongoConnectOptions());
 }
 
 async function resolveSystemAdmin() {

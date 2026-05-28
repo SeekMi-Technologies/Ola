@@ -16,14 +16,10 @@ require('dotenv').config({ path: '.env.local' });
 
 console.log('Connecting to MongoDB database:', process.env.DATABASE);
 
-// Increase timeouts for Docker environment
-mongoose.connect(process.env.DATABASE, {
-  tls: true,
-  tlsAllowInvalidCertificates: true,
-  serverSelectionTimeoutMS: 30000, // 30 seconds
-  socketTimeoutMS: 45000, // 45 seconds
-  family: 4 // Force IPv4
-}).catch(err => {
+// Increase timeouts for Docker environment. TLS is conditional (srv → on, plain → off);
+// see @/utils/dbOptions for why.
+const { mongoConnectOptions } = require('@/utils/dbOptions');
+mongoose.connect(process.env.DATABASE, mongoConnectOptions()).catch(err => {
   console.error('MongoDB connection error. Please make sure MongoDB is running:', err.message);
 });
 
