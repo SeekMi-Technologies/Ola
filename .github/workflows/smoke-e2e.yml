@@ -89,10 +89,16 @@ jobs:
           done
           [[ -n "$LOGIN_OK" ]] || { echo "FAIL 3: login didn't succeed"; exit 1; }
           grep -q 'token' /tmp/jar || { echo "FAIL 3: no token cookie set"; exit 1; }
+          ADMIN_ID=$(echo "$LOGIN_RESP" | jq -r '.result._id')
+          [[ -n "$ADMIN_ID" && "$ADMIN_ID" != "null" ]] || { echo "FAIL 3: couldn't parse admin _id from login response: $LOGIN_RESP"; exit 1; }
           echo "PASS 3: login success + token cookie"
 
-          # 4. Cookie auth propagates → authed resource returns a success envelope.
-          AUTH_RESP=$(curl -s -b /tmp/jar "$BASE/api/setting/listAll")
+          # 4. Cookie auth propagates → authed read-self returns a success envelope.
+          #    Uses /api/admin/read/<id> (not /setting/listAll, which legitimately
+          #    returns "success":false when the Setting collection is empty — CI
+          #    only seeds an admin, not defaults, so listAll's empty-state shape
+          #    is indistinguishable from a real failure envelope).
+          AUTH_RESP=$(curl -s -b /tmp/jar "$BASE/api/admin/read/$ADMIN_ID")
           echo "$AUTH_RESP" | grep -q '"success":true' || { echo "FAIL 4: cookie auth not propagating: $AUTH_RESP"; exit 1; }
           echo "PASS 4: cookie auth propagates"
 
