@@ -120,13 +120,17 @@ fi
 # ---------------------------------------------------------------------------
 
 echo
-echo "==> Scenario 3: GET /api/llmusage/list with cookie → 200 + result array"
+echo "==> Scenario 3: GET /api/llmusage/list with cookie → 2xx + success envelope"
+# Note: Ola CRM's createCRUDController.paginatedList returns HTTP 203
+# ("Non-Authoritative Information") with success:true when the collection is
+# empty — see backend/src/controllers/middlewaresControllers/createCRUDController/paginatedList.js:57.
+# So we accept 200 (has rows) OR 203 (empty), both are documented success states.
 S3_BODY="$WORKDIR/s3.json"
 S3_STATUS=$(curl -s -o "$S3_BODY" -w '%{http_code}' "$BACKEND/api/llmusage/list" \
   -b "$COOKIE_JAR")
-if [[ "$S3_STATUS" == "200" ]] && grep -q '"success":true' "$S3_BODY" \
+if [[ "$S3_STATUS" =~ ^20[03]$ ]] && grep -q '"success":true' "$S3_BODY" \
    && grep -q '"result":' "$S3_BODY"; then
-  green "    PASS — list endpoint returns success envelope"
+  green "    PASS — list endpoint returns success envelope (HTTP $S3_STATUS)"
   PASSES=$((PASSES + 1))
 else
   red "    FAIL — got HTTP $S3_STATUS, body:"
@@ -231,6 +235,67 @@ else
   else
     green "    PASS — tool-using turn recorded iterations=$ITER5 (>= 2)"
     PASSES=$((PASSES + 1))
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario 6 — 2-turn session triggers auto-title (channel=ask-ola-autotitle)
+# ---------------------------------------------------------------------------
+#
+# maybeAutoTitle fires on the 2nd turn (count of ChatMessage docs >= 4 = 2 turns
+# × 2 docs/turn). The auto-title call is non-streaming → response.usage drives
+# a 5th LlmUsage row with channel='ask-ola-autotitle'.
+
+echo
+echo "==> Scenario 6: 2-turn session triggers auto-title (#98 C5)"
+# Baseline: count rows with the ask-ola-autotitle channel BEFORE the test
+S6_LIST_BEFORE="$WORKDIR/s6_before.json"
+curl -s -o "$S6_LIST_BEFORE" "$BACKEND/api/llmusage/list?items=100" -b "$COOKIE_JAR"
+BASE6_AT=$(grep -o '"channel":"ask-ola-autotitle"' "$S6_LIST_BEFORE" | wc -l | tr -d ' ')
+
+# Turn 1 — new session, capture sessionId from the SSE done frame
+S6_T1="$WORKDIR/s6_t1.sse"
+curl -sN -X POST "$BACKEND/api/ola/chat" \
+  -H 'Content-Type: application/json' \
+  -b "$COOKIE_JAR" \
+  --max-time 60 \
+  -d '{"message":"hello, what merchandise do you have?"}' \
+  > "$S6_T1" 2>&1
+
+# Extract sessionId from `data: {"sessionId":"...","blocks":[...]}` frame
+S6_SESSION_ID=$(grep -o '"sessionId":"[a-f0-9]\{20,\}"' "$S6_T1" | head -1 | sed 's/"sessionId":"\(.*\)"/\1/')
+
+if [[ -z "$S6_SESSION_ID" ]]; then
+  red "    FAIL — could not extract sessionId from turn 1 SSE response"
+  cat "$S6_T1" | tail -5
+  FAILS=$((FAILS + 1))
+else
+  # Turn 2 — same session, this is the trigger boundary for autotitle
+  curl -sN -X POST "$BACKEND/api/ola/chat" \
+    -H 'Content-Type: application/json' \
+    -b "$COOKIE_JAR" \
+    --max-time 60 \
+    -d "{\"message\":\"thanks, anything stainless?\",\"sessionId\":\"$S6_SESSION_ID\"}" \
+    > "$WORKDIR/s6_t2.sse" 2>&1
+
+  # Auto-title is fire-and-forget: ChatMessage.insertMany finishes, then
+  # maybeAutoTitle queries count, then generateTitle does a non-stream call
+  # to nanobot, then recordUsage writes the row. Allow generous wait.
+  sleep 6
+
+  S6_LIST_AFTER="$WORKDIR/s6_after.json"
+  curl -s -o "$S6_LIST_AFTER" "$BACKEND/api/llmusage/list?items=100" -b "$COOKIE_JAR"
+  AFTER6_AT=$(grep -o '"channel":"ask-ola-autotitle"' "$S6_LIST_AFTER" | wc -l | tr -d ' ')
+
+  if [[ $AFTER6_AT -gt $BASE6_AT ]]; then
+    green "    PASS — auto-title row appeared (ask-ola-autotitle: $BASE6_AT → $AFTER6_AT)"
+    PASSES=$((PASSES + 1))
+  else
+    red "    FAIL — no new ask-ola-autotitle row (before=$BASE6_AT after=$AFTER6_AT)"
+    echo "    sessionId was: $S6_SESSION_ID"
+    echo "    last 3 lines of after-list:"
+    tail -3 "$S6_LIST_AFTER"
+    FAILS=$((FAILS + 1))
   fi
 fi
 

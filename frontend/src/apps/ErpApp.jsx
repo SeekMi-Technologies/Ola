@@ -18,7 +18,9 @@ import { selectSettings } from '@/redux/settings/selectors';
 
 import AppRouter from '@/router/AppRouter';
 
-import OlaChatPanel from '@/apps/OlaChatPanel/OlaChatPanel';
+// === MVP-HIDDEN: 侧弹 Ask Ola 面板本轮不需要（用左侧导航 Ask Ola 链接进主页面） ===
+// import OlaChatPanel from '@/apps/OlaChatPanel/OlaChatPanel';
+// === END MVP-HIDDEN ===
 
 import useResponsive from '@/hooks/useResponsive';
 
@@ -31,7 +33,9 @@ export default function ErpCrmApp() {
 
   const { state: stateApp, appContextAction } = useAppContext();
   const { app } = appContextAction;
-  const { isNavMenuClose, currentApp, isOlaPanelOpen } = stateApp;
+  // === MVP-HIDDEN: isOlaPanelOpen 仅供已隐藏的侧弹面板使用 ===
+  const { isNavMenuClose, currentApp } = stateApp;
+  // === END MVP-HIDDEN ===
 
   const { isMobile } = useResponsive();
 
@@ -92,7 +96,9 @@ export default function ErpCrmApp() {
                 <AppRouter />
               </Content>
             </div>
-            {isOlaPanelOpen && <OlaChatPanel />}
+            {/* === MVP-HIDDEN: 侧弹 Ask Ola 面板本轮不需要 === */}
+            {/* {isOlaPanelOpen && <OlaChatPanel />} */}
+            {/* === END MVP-HIDDEN === */}
           </div>
         )}
       </Layout>

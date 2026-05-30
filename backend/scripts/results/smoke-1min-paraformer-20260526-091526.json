@@ -1,0 +1,21 @@
+{
+  "scenario": "smoke-1min",
+  "audio_file": "/Users/duke/Desktop/未命名.m4a",
+  "audio_duration_sec": 515.98,
+  "provider": "paraformer",
+  "admin_email": "admin@admin.com",
+  "timestamp": "2026-05-26T16:15:26Z",
+  "metrics": {
+    "upload_latency_ms": 774,
+    "poll_duration_ms": 779,
+    "total_duration_ms": 1553,
+    "worker_duration_ms": 207698,
+    "sentence_count": null,
+    "speaker_count": null,
+    "sidecar_bytes": null
+  },
+  "deduped": true,
+  "job_status": "done",
+  "job_error": "",
+  "first_line": ""
+}

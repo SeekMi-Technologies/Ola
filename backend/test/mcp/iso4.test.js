@@ -1,17 +1,6 @@
-/**
- * ISO4 (issue #185) — HTTP-layer X-Acting-As header decision E2E.
- *
- * Covers the `decideActingAdmin` helper end-to-end with real Mongo +
- * registered Admin docs. This is what server.js calls per request before
- * wrapping transport.handleRequest in runWithContext.
- *
- * Status mapping verified:
- *   missing/empty header   → 200 path, isSystemFallback=true, actingAdmin=systemAdmin
- *   non-ObjectId           → 400 VALIDATION
- *   unknown ObjectId       → 403 NOT_FOUND
- *   removed/disabled admin → 403 PERMISSION
- *   valid enabled admin    → 200 path, isSystemFallback=false, actingAdmin=that admin
- */
+// HTTP-layer decideActingAdmin E2E with real Mongo. Fail-closed on missing
+// header for business tools; SYSTEM_TOOLS whitelist still allows protocol
+// methods + salesperson.lookup_by_email to fall back to systemAdmin.
 
 const path = require('path');
 const { globSync } = require('glob');
@@ -26,6 +15,7 @@ const {
 } = require(path.join(BACKEND_ROOT, 'src/mcp/bootstrap'));
 const {
   decideActingAdmin,
+  SYSTEM_TOOLS,
 } = require(path.join(BACKEND_ROOT, 'src/mcp/headerResolver'));
 
 let mongo;
@@ -61,8 +51,6 @@ async function makeAdmin(overrides = {}) {
 }
 
 async function bootstrapWithSystemAdmin() {
-  // Mongo is already connected by beforeAll via MongoMemoryServer; we only
-  // need to seed an owner Admin and prime the systemAdmin cache.
   await mongoose.model('Admin').create({
     email: 'sys@example.com',
     name: 'Sys',
@@ -74,32 +62,159 @@ async function bootstrapWithSystemAdmin() {
   await resolveSystemAdmin();
 }
 
-describe('decideActingAdmin — header decision E2E', () => {
-  test('missing header → fallback to systemAdmin', async () => {
+describe('decideActingAdmin — fail-closed when header missing for business tool', () => {
+  test('undefined header + customer.create → 401 UNAUTHORIZED', async () => {
     await bootstrapWithSystemAdmin();
-    const d = await decideActingAdmin(undefined);
+    const d = await decideActingAdmin(undefined, 'customer.create');
+    expect(d.ok).toBe(false);
+    expect(d.status).toBe(401);
+    expect(d.code).toBe('UNAUTHORIZED');
+    expect(d.message).toMatch(/X-Acting-As/);
+  });
+
+  test('empty string + merch.create → 401 UNAUTHORIZED', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin('', 'merch.create');
+    expect(d.ok).toBe(false);
+    expect(d.status).toBe(401);
+    expect(d.code).toBe('UNAUTHORIZED');
+  });
+
+  test('whitespace-only + quote.create → 401 UNAUTHORIZED', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin('   ', 'quote.create');
+    expect(d.ok).toBe(false);
+    expect(d.status).toBe(401);
+    expect(d.code).toBe('UNAUTHORIZED');
+  });
+
+  test('null + quote.generate_pdf_url → 401 (PDF requires acting-as)', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(null, 'quote.generate_pdf_url');
+    expect(d.ok).toBe(false);
+    expect(d.status).toBe(401);
+    expect(d.code).toBe('UNAUTHORIZED');
+  });
+
+  test('missing header + unknown toolLabel → 401 (fail-closed by default)', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, 'mcp.request');
+    expect(d.ok).toBe(false);
+    expect(d.status).toBe(401);
+    expect(d.code).toBe('UNAUTHORIZED');
+  });
+
+  test('missing header + undefined toolLabel → 401 (no whitelist match)', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, undefined);
+    expect(d.ok).toBe(false);
+    expect(d.status).toBe(401);
+    expect(d.code).toBe('UNAUTHORIZED');
+  });
+});
+
+describe('decideActingAdmin — SYSTEM_TOOLS whitelist falls back to systemAdmin', () => {
+  test('missing header + initialize → systemAdmin fallback', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, 'initialize');
     expect(d.ok).toBe(true);
     expect(d.isSystemFallback).toBe(true);
     expect(d.actingAdmin.email).toBe('sys@example.com');
   });
 
-  test('empty string header → fallback to systemAdmin', async () => {
+  test('missing header + tools/list → systemAdmin fallback', async () => {
     await bootstrapWithSystemAdmin();
-    const d = await decideActingAdmin('');
+    const d = await decideActingAdmin(undefined, 'tools/list');
     expect(d.ok).toBe(true);
     expect(d.isSystemFallback).toBe(true);
   });
 
-  test('whitespace-only header → fallback to systemAdmin', async () => {
+  test('missing header + resources/list → systemAdmin fallback', async () => {
     await bootstrapWithSystemAdmin();
-    const d = await decideActingAdmin('   ');
+    const d = await decideActingAdmin(undefined, 'resources/list');
     expect(d.ok).toBe(true);
     expect(d.isSystemFallback).toBe(true);
   });
 
+  test('missing header + prompts/list → systemAdmin fallback', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, 'prompts/list');
+    expect(d.ok).toBe(true);
+    expect(d.isSystemFallback).toBe(true);
+  });
+
+  test('missing header + ping → systemAdmin fallback', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, 'ping');
+    expect(d.ok).toBe(true);
+    expect(d.isSystemFallback).toBe(true);
+  });
+
+  test('missing header + salesperson.lookup_by_email → systemAdmin fallback', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, 'salesperson.lookup_by_email');
+    expect(d.ok).toBe(true);
+    expect(d.isSystemFallback).toBe(true);
+    expect(d.actingAdmin.email).toBe('sys@example.com');
+  });
+
+  test('missing header + notifications/initialized → systemAdmin fallback (handshake)', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, 'notifications/initialized');
+    expect(d.ok).toBe(true);
+    expect(d.isSystemFallback).toBe(true);
+  });
+
+  test('missing header + notifications/cancelled → systemAdmin fallback', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, 'notifications/cancelled');
+    expect(d.ok).toBe(true);
+    expect(d.isSystemFallback).toBe(true);
+  });
+
+  test('missing header + notifications/progress → systemAdmin fallback', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, 'notifications/progress');
+    expect(d.ok).toBe(true);
+    expect(d.isSystemFallback).toBe(true);
+  });
+
+  test('missing header + notifications/roots/list_changed → systemAdmin fallback', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, 'notifications/roots/list_changed');
+    expect(d.ok).toBe(true);
+    expect(d.isSystemFallback).toBe(true);
+  });
+
+  test('missing header + unknown notifications/ method → 401 (not whitelisted)', async () => {
+    await bootstrapWithSystemAdmin();
+    const d = await decideActingAdmin(undefined, 'notifications/unknown_method');
+    expect(d.ok).toBe(false);
+    expect(d.status).toBe(401);
+  });
+
+  test('SYSTEM_TOOLS export contains exactly the documented set', () => {
+    expect(Array.from(SYSTEM_TOOLS).sort()).toEqual(
+      [
+        'initialize',
+        'notifications/cancelled',
+        'notifications/initialized',
+        'notifications/progress',
+        'notifications/roots/list_changed',
+        'ping',
+        'prompts/list',
+        'resources/list',
+        'salesperson.lookup_by_email',
+        'tools/list',
+      ].sort(),
+    );
+  });
+});
+
+describe('decideActingAdmin — header validation (unchanged behaviour)', () => {
   test('non-ObjectId header → 400 VALIDATION', async () => {
     await bootstrapWithSystemAdmin();
-    const d = await decideActingAdmin('not-a-valid-id');
+    const d = await decideActingAdmin('not-a-valid-id', 'customer.create');
     expect(d.ok).toBe(false);
     expect(d.status).toBe(400);
     expect(d.code).toBe('VALIDATION');
@@ -108,7 +223,7 @@ describe('decideActingAdmin — header decision E2E', () => {
   test('unknown ObjectId → 403 NOT_FOUND', async () => {
     await bootstrapWithSystemAdmin();
     const fakeId = new mongoose.Types.ObjectId().toString();
-    const d = await decideActingAdmin(fakeId);
+    const d = await decideActingAdmin(fakeId, 'customer.create');
     expect(d.ok).toBe(false);
     expect(d.status).toBe(403);
     expect(d.code).toBe('NOT_FOUND');
@@ -117,7 +232,7 @@ describe('decideActingAdmin — header decision E2E', () => {
   test('removed admin → 403 PERMISSION', async () => {
     await bootstrapWithSystemAdmin();
     const a = await makeAdmin({ email: 'gone@example.com', removed: true });
-    const d = await decideActingAdmin(a._id.toString());
+    const d = await decideActingAdmin(a._id.toString(), 'customer.create');
     expect(d.ok).toBe(false);
     expect(d.status).toBe(403);
     expect(d.code).toBe('PERMISSION');
@@ -126,16 +241,16 @@ describe('decideActingAdmin — header decision E2E', () => {
   test('disabled admin → 403 PERMISSION', async () => {
     await bootstrapWithSystemAdmin();
     const a = await makeAdmin({ email: 'off@example.com', enabled: false });
-    const d = await decideActingAdmin(a._id.toString());
+    const d = await decideActingAdmin(a._id.toString(), 'customer.create');
     expect(d.ok).toBe(false);
     expect(d.status).toBe(403);
     expect(d.code).toBe('PERMISSION');
   });
 
-  test('valid enabled admin → returns admin, not fallback', async () => {
+  test('valid enabled admin + business tool → 200, not fallback', async () => {
     await bootstrapWithSystemAdmin();
     const a = await makeAdmin({ email: 'sales@example.com' });
-    const d = await decideActingAdmin(a._id.toString());
+    const d = await decideActingAdmin(a._id.toString(), 'customer.create');
     expect(d.ok).toBe(true);
     expect(d.isSystemFallback).toBe(false);
     expect(d.actingAdmin.email).toBe('sales@example.com');
@@ -144,8 +259,20 @@ describe('decideActingAdmin — header decision E2E', () => {
   test('header value with surrounding whitespace → trimmed and resolved', async () => {
     await bootstrapWithSystemAdmin();
     const a = await makeAdmin({ email: 'trimmed@example.com' });
-    const d = await decideActingAdmin(`  ${a._id.toString()}  `);
+    const d = await decideActingAdmin(
+      `  ${a._id.toString()}  `,
+      'customer.create',
+    );
     expect(d.ok).toBe(true);
     expect(d.actingAdmin.email).toBe('trimmed@example.com');
+  });
+
+  test('valid header BEATS SYSTEM_TOOLS — explicit identity wins', async () => {
+    await bootstrapWithSystemAdmin();
+    const a = await makeAdmin({ email: 'real@example.com' });
+    const d = await decideActingAdmin(a._id.toString(), 'initialize');
+    expect(d.ok).toBe(true);
+    expect(d.isSystemFallback).toBe(false);
+    expect(d.actingAdmin.email).toBe('real@example.com');
   });
 });

@@ -47,12 +47,20 @@ const setupIndexes = require('./setup/indexSetup');
 
 mongoose.connection.once('open', async () => {
   console.log('✅ MongoDB database connection established successfully');
-  
+
   // 设置数据库索引
   try {
     await setupIndexes();
   } catch (error) {
     console.error('设置索引时出错:', error);
+  }
+
+  // Resume orphan transcription Jobs that were running/pending when the process crashed
+  try {
+    const resumeOrphanJobs = require('./jobs/resumeOrphanJobs');
+    await resumeOrphanJobs();
+  } catch (error) {
+    console.error('[resume-orphan-jobs] startup error:', error.message);
   }
 });
 

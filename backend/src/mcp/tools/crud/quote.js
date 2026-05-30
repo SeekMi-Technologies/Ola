@@ -23,6 +23,7 @@ const { z } = require('zod');
 const mongoose = require('mongoose');
 const quoteController = require('@/controllers/appControllers/quoteController');
 const { runController } = require('../../adapters/controllerAdapter');
+const { getCurrentActingAdmin } = require('../../context');
 
 // Auto-fill `items[].description` from the Merch master record (by
 // serialNumber) so the generated Quote shows meaningful descriptions in
@@ -299,8 +300,59 @@ const update = {
   },
 };
 
+const generatePdfUrl = {
+  name: 'quote.generate_pdf_url',
+  description:
+    'Return a downloadable PDF URL for an existing quote. Idempotent and safe to re-call; the PDF is regenerated server-side on each download. Useful any time an agent needs to surface a PDF link for a quote, not just after creation.',
+  inputSchema: {
+    id: z.string().min(1).describe('Quote _id (24-char Mongo ObjectId)'),
+  },
+  handler: async ({ id }) => {
+    if (!mongoose.isValidObjectId(id)) {
+      return {
+        ok: false,
+        code: 'VALIDATION',
+        message: `Invalid quote id (must be a 24-char hex ObjectId): ${id}`,
+      };
+    }
+    let actingAdmin = null;
+    try {
+      actingAdmin = getCurrentActingAdmin();
+    } catch (_outsideScope) {
+      actingAdmin = null;
+    }
+    if (!actingAdmin || !actingAdmin._id) {
+      return {
+        ok: false,
+        code: 'PERMISSION',
+        message: 'quote.generate_pdf_url requires an authenticated admin context',
+      };
+    }
+    const q = await mongoose
+      .model('Quote')
+      .findOne({ _id: id, removed: false, createdBy: actingAdmin._id })
+      .select('_id')
+      .lean();
+    if (!q) {
+      return {
+        ok: false,
+        code: 'NOT_FOUND',
+        message: `Quote not found (id=${id})`,
+      };
+    }
+    const baseRaw =
+      process.env.PUBLIC_SERVER_FILE ||
+      `http://localhost:${process.env.PORT || 8888}/`;
+    const base = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;
+    return {
+      ok: true,
+      data: { url: `${base}/download/quote/quote-${id}.pdf` },
+    };
+  },
+};
+
 module.exports = {
-  tools: [search, read, create, update],
+  tools: [search, read, create, update, generatePdfUrl],
   // Test-only export — enrichItemDescriptions is the auto-fill helper that
   // populates `description` from Merch.description_en (preferred) or
   // description_cn (fallback). Surfaced so backend/test/language.test.js can

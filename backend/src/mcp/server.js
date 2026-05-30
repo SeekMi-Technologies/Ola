@@ -103,6 +103,19 @@ async function main() {
 
   const app = express();
 
+  // GET /health — public liveness probe. No auth: reveals only
+  // process-level metadata (no secrets, no business data).
+  app.get('/health', (_req, res) => {
+    res.json({
+      ok: true,
+      ts: Date.now(),
+      uptimeSec: Math.round(process.uptime()),
+      toolsCount: TOOL_COUNT,
+      bindHost: HOST,
+      bindPort: PORT,
+    });
+  });
+
   // POST /mcp —— 唯一的 MCP 入口。
   // 中间件顺序：先鉴权（无 token 直接 401，省 body parse），再 json parse，再 handler。
   app.post('/mcp', requireAuth, express.json({ limit: '1mb' }), async (req, res) => {
@@ -135,9 +148,7 @@ async function main() {
       });
     };
 
-    // ISO1/3/4 (issue #185): X-Acting-As header → acting-as admin decision.
-    // Pure helper in ./headerResolver.js so jest can cover the full path.
-    const decision = await decideActingAdmin(req.headers['x-acting-as']);
+    const decision = await decideActingAdmin(req.headers['x-acting-as'], toolLabel);
     if (!decision.ok) {
       logOnce(false, decision.code, decision.message);
       if (!res.headersSent) {

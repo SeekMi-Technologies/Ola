@@ -125,7 +125,6 @@ const currencyFlag = [
   { currency_code: 'TOP', flag: '🇹🇴' },
   { currency_code: 'TRY', flag: '🇹🇷' },
   { currency_code: 'TTD', flag: '🇹🇹' },
-  { currency_code: 'TWD', flag: '🇹🇼' },
   { currency_code: 'TZS', flag: '🇹🇿' },
   { currency_code: 'UAH', flag: '🇺🇦' },
   { currency_code: 'UGX', flag: '🇺🇬' },

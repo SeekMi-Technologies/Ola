@@ -2,10 +2,23 @@
 //
 // Tests for ThinkingPanel (Issue #131, backlog L4).
 //
-// Pure React component, no API / Redux dependencies. vitest + @testing-library/react.
+// Component reads Redux lang via useLanguage hook for the localized
+// "Ola is working on it..." / "View thinking process" fallback copy.
+// We mock useLanguage to keep these tests Provider-free.
 
-import { describe, test, expect, afterEach } from 'vitest';
+import { describe, test, expect, afterEach, vi } from 'vitest';
 import { render, fireEvent, cleanup } from '@testing-library/react';
+
+vi.mock('@/locale/useLanguage', () => ({
+  default: () => (key) => {
+    const en = {
+      'Ola is working on it...': 'Ola is working on it...',
+      'View thinking process': 'View thinking process',
+    };
+    return en[key] || key;
+  },
+}));
+
 import ThinkingPanel from '../ThinkingPanel';
 
 // vitest doesn't run @testing-library auto-cleanup like jest does, so DOM

@@ -28,17 +28,30 @@ describe('llmPricing — module exports', () => {
   });
 
   test('default Ask Ola model is in PRICING (matches ola/nanobot.config.template.json)', () => {
-    // toHaveProperty parses '.' as a nesting separator, which mangles
-    // 'gemini:gemini-3.1-flash-lite-preview' (the 3.1 becomes a sub-path).
-    // Use array form to pass a literal key with dots.
+    // Read the template dynamically so this test fails when the default model
+    // is changed in template.json without a matching entry being added here.
+    // Previous hardcoded form silently drifted after the 2026-05-26 GA cut-over.
+    const path = require('path');
+    const nanobotConfig = require(path.join(__dirname, '../../ola/nanobot.config.template.json'));
+    const { provider, model } = nanobotConfig.agents.defaults;
+    const key = `${provider}:${model}`;
+    // toHaveProperty parses '.' as a nesting separator, which mangles keys
+    // like 'gemini:gemini-3.1-flash-lite'. Use array form for literal keys.
+    expect(PRICING).toHaveProperty([key]);
+  });
+
+  test('preview model entry is retained for historical LLMUsage re-costing', () => {
+    // Google retired the preview endpoint on 2026-05-26, but LLMUsage rows
+    // written before then still reference 'gemini-3.1-flash-lite-preview'.
+    // Removing this entry would silently zero-out historical cost lookups.
     expect(PRICING).toHaveProperty(['gemini:gemini-3.1-flash-lite-preview']);
   });
 });
 
 describe('llmPricing — calcCost happy path', () => {
-  test('1000 input + 500 output Gemini 3.1 Flash-Lite Preview = $0.001', () => {
+  test('1000 input + 500 output Gemini 3.1 Flash-Lite = $0.001', () => {
     // Spot-check: 1000 × $0.25/1M + 500 × $1.50/1M = $0.00025 + $0.00075 = $0.001
-    const cost = calcCost('gemini', 'gemini-3.1-flash-lite-preview', {
+    const cost = calcCost('gemini', 'gemini-3.1-flash-lite', {
       inputTokens: 1000,
       outputTokens: 500,
     });
@@ -46,12 +59,12 @@ describe('llmPricing — calcCost happy path', () => {
   });
 
   test('cached tokens reduce billable input cost', () => {
-    const baseline = calcCost('gemini', 'gemini-3.1-flash-lite-preview', {
+    const baseline = calcCost('gemini', 'gemini-3.1-flash-lite', {
       inputTokens: 1000,
       outputTokens: 500,
       cachedTokens: 0,
     });
-    const withCache = calcCost('gemini', 'gemini-3.1-flash-lite-preview', {
+    const withCache = calcCost('gemini', 'gemini-3.1-flash-lite', {
       inputTokens: 1000,
       outputTokens: 500,
       cachedTokens: 800,
@@ -63,7 +76,7 @@ describe('llmPricing — calcCost happy path', () => {
   });
 
   test('zero output and zero cache returns input-only cost', () => {
-    const cost = calcCost('gemini', 'gemini-3.1-flash-lite-preview', {
+    const cost = calcCost('gemini', 'gemini-3.1-flash-lite', {
       inputTokens: 4000,
       outputTokens: 0,
     });
@@ -75,7 +88,7 @@ describe('llmPricing — calcCost happy path', () => {
     // 1 input token at $0.25/1M = $0.00000025. helpers.calculate.* uses
     // currency.js precision-2 and would round this to $0.00 — this regression
     // test confirms our explicit precision-10 path keeps the value alive.
-    const cost = calcCost('gemini', 'gemini-3.1-flash-lite-preview', {
+    const cost = calcCost('gemini', 'gemini-3.1-flash-lite', {
       inputTokens: 1,
       outputTokens: 0,
     });
@@ -102,7 +115,7 @@ describe('llmPricing — calcCost edge cases', () => {
   });
 
   test('non-numeric tokens coerce to 0 (defensive — never NaN)', () => {
-    const cost = calcCost('gemini', 'gemini-3.1-flash-lite-preview', {
+    const cost = calcCost('gemini', 'gemini-3.1-flash-lite', {
       inputTokens: 'abc',
       outputTokens: null,
       cachedTokens: undefined,
@@ -111,7 +124,7 @@ describe('llmPricing — calcCost edge cases', () => {
   });
 
   test('negative tokens floor at 0 (do not produce negative cost)', () => {
-    const cost = calcCost('gemini', 'gemini-3.1-flash-lite-preview', {
+    const cost = calcCost('gemini', 'gemini-3.1-flash-lite', {
       inputTokens: -500,
       outputTokens: -100,
     });
@@ -121,7 +134,7 @@ describe('llmPricing — calcCost edge cases', () => {
   test('cachedTokens > inputTokens caps at inputTokens (cannot have more cache hits than input)', () => {
     // Defensive: if a buggy provider report shows cached > input, we should
     // not bill negative input. Cap and proceed.
-    const cost = calcCost('gemini', 'gemini-3.1-flash-lite-preview', {
+    const cost = calcCost('gemini', 'gemini-3.1-flash-lite', {
       inputTokens: 100,
       outputTokens: 0,
       cachedTokens: 500, // larger than input
@@ -133,7 +146,7 @@ describe('llmPricing — calcCost edge cases', () => {
 
   test('all zero tokens returns exactly 0', () => {
     expect(
-      calcCost('gemini', 'gemini-3.1-flash-lite-preview', {
+      calcCost('gemini', 'gemini-3.1-flash-lite', {
         inputTokens: 0,
         outputTokens: 0,
         cachedTokens: 0,
@@ -155,7 +168,7 @@ describe('llmPricing — large-scale realism', () => {
 
   test('1M tokens Gemini Flash-Lite is sub-dollar (Ask Ola realistic upper bound)', () => {
     // 1M input + 1M output × Flash-Lite = $0.25 + $1.50 = $1.75
-    const cost = calcCost('gemini', 'gemini-3.1-flash-lite-preview', {
+    const cost = calcCost('gemini', 'gemini-3.1-flash-lite', {
       inputTokens: 1_000_000,
       outputTokens: 1_000_000,
     });

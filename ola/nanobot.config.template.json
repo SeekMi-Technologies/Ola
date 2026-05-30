@@ -2,7 +2,7 @@
   "agents": {
     "defaults": {
       "workspace": "~/.nanobot/workspace",
-      "model": "gemini-3.1-flash-lite-preview",
+      "model": "gemini-3.1-flash-lite",
       "provider": "gemini",
       "maxTokens": 8192,
       "contextWindowTokens": 65536,
@@ -31,29 +31,29 @@
       "groupPolicy": "mention"
     },
     "email": {
-      "enabled": false,
-      "consentGranted": false,
-      "imapHost": "",
+      "enabled": true,
+      "consentGranted": true,
+      "imapHost": "${ZOHO_IMAP_HOST}",
       "imapPort": 993,
-      "imapUsername": "",
-      "imapPassword": "",
+      "imapUsername": "${ZOHO_OLA_EMAIL}",
+      "imapPassword": "${ZOHO_OLA_APP_PASSWORD}",
       "imapMailbox": "INBOX",
       "imapUseSsl": true,
-      "smtpHost": "",
+      "smtpHost": "${ZOHO_SMTP_HOST}",
       "smtpPort": 587,
-      "smtpUsername": "",
-      "smtpPassword": "",
+      "smtpUsername": "${ZOHO_OLA_EMAIL}",
+      "smtpPassword": "${ZOHO_OLA_APP_PASSWORD}",
       "smtpUseTls": true,
       "smtpUseSsl": false,
-      "fromAddress": "",
+      "fromAddress": "${ZOHO_OLA_EMAIL}",
       "autoReplyEnabled": true,
       "pollIntervalSeconds": 30,
       "markSeen": true,
       "maxBodyChars": 12000,
       "subjectPrefix": "Re: ",
-      "allowFrom": [],
-      "verifyDkim": true,
-      "verifySpf": true
+      "allowFrom": ["*"],
+      "verifyDkim": false,
+      "verifySpf": false
     },
     "feishu": {
       "enabled": false,
@@ -296,11 +296,11 @@
       }
     },
     "exec": {
-      "enable": true,
+      "enable": false,
       "timeout": 60,
       "pathAppend": ""
     },
-    "restrictToWorkspace": false,
+    "restrictToWorkspace": true,
     "mcpServers": {
       "ola_crm": {
         "type": "streamableHttp",

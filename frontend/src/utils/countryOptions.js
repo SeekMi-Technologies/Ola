@@ -43,5 +43,4 @@ export const COUNTRY_OPTIONS = [
   { value: 'NZ', label: '🇳🇿 New Zealand' },
   { value: 'SG', label: '🇸🇬 Singapore' },
   { value: 'HK', label: '🇭🇰 Hong Kong' },
-  { value: 'TW', label: '🇹🇼 Taiwan' },
 ].sort((a, b) => a.label.localeCompare(b.label));

@@ -17,7 +17,7 @@ const currency = require('currency.js');
 const COST_PRECISION = 10;
 const cur = (v) => currency(v, { precision: COST_PRECISION });
 
-const PRICING_VERSION = '2026-04-28';
+const PRICING_VERSION = '2026-05-26';
 
 // USD per 1,000,000 tokens. Prices are Standard tier, paid (text input).
 // Source: https://ai.google.dev/gemini-api/docs/pricing (fetched 2026-04-28)
@@ -28,6 +28,9 @@ const PRICING_VERSION = '2026-04-28';
 // the (input - cached) split.
 const PRICING = {
   // The current default Ask Ola model — see ola/nanobot.config.template.json.
+  'gemini:gemini-3.1-flash-lite':         { input: 0.25, output: 1.50, cached: 0.025 },
+  // Retained for historical LLMUsage rows written before the GA cut-over.
+  // Google retired the preview endpoint on 2026-05-26 (returns 404).
   'gemini:gemini-3.1-flash-lite-preview': { input: 0.25, output: 1.50, cached: 0.025 },
   'gemini:gemini-2.5-flash':              { input: 0.30, output: 2.50, cached: 0.03 },
   'gemini:gemini-2.5-flash-lite':         { input: 0.10, output: 0.40, cached: 0.01 },

@@ -40,9 +40,13 @@ const schema = new mongoose.Schema({
   // application logs so we can match a record to a specific HTTP request.
   requestId: { type: String, required: true },
 
-  // Channel where the turn originated. 'ask-ola' for the Ask Ola web UI;
-  // future: 'whatsapp', 'wechat', 'email'. Indexed because dashboard splits
-  // by channel.
+  // Channel where the turn originated. Indexed because the dashboard splits
+  // cost by channel. Allowed values (no enum constraint — additive over time):
+  //   'ask-ola'             — user-facing Ask Ola web chat (the main path)
+  //   'ask-ola-autotitle'   — incidental non-streaming LLM call that
+  //                           generates the conversation title at turn 4+
+  //                           (#98 C5; usually small Gemini-flash-lite spend)
+  //   'whatsapp' / 'wechat' / 'email'  — planned channels (not wired yet)
   channel: { type: String, default: 'ask-ola', index: true },
   // LLM provider as nanobot reports it ('gemini' / 'openai' / 'anthropic').
   provider: { type: String, required: true },

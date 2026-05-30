@@ -104,7 +104,6 @@ const currencyList = [
   'TOP',
   'TRY',
   'TTD',
-  'TWD',
   'TZS',
   'UAH',
   'UGX',

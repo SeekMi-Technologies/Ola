@@ -128,6 +128,15 @@ const userId = new mongoose.Types.ObjectId();
 const sessionId = new mongoose.Types.ObjectId();
 const session = { _id: sessionId, nanobotSessionId: 'user:test:conv:abc' };
 
+// Default wire-frame metadata. Mirrors what nanobot/api/server.py:_sse_usage
+// emits for the current Ask Ola configuration. Tests spread this into their
+// usage objects so the recordUsage hard-fail-on-missing-provider/model
+// (Ola CRM #98) doesn't fire on happy-path cases.
+const FRAME_META = {
+  provider: 'gemini',
+  model: 'gemini-3.1-flash-lite-preview',
+};
+
 describe('recordUsage — happy path', () => {
   test('persists a complete LlmUsage doc with computed costUsd > 0', async () => {
     await recordUsage({
@@ -135,6 +144,7 @@ describe('recordUsage — happy path', () => {
       session,
       messageId: null,
       usage: {
+        ...FRAME_META,
         prompt_tokens: 1500,
         completion_tokens: 400,
         total_tokens: 1900,
@@ -172,7 +182,7 @@ describe('recordUsage — happy path', () => {
       userId,
       session,
       messageId,
-      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      usage: { ...FRAME_META, prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
       latencyMs: 200,
       requestId: 'req-msg-id',
     });
@@ -184,7 +194,7 @@ describe('recordUsage — happy path', () => {
     await recordUsage({
       userId,
       session,
-      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      usage: { ...FRAME_META, prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
       latencyMs: 100,
       requestId: 'req-errored',
       errored: true,
@@ -197,7 +207,7 @@ describe('recordUsage — happy path', () => {
     await recordUsage({
       userId,
       session,
-      usage: { prompt_tokens: 200, completion_tokens: 80 }, // no total_tokens
+      usage: { ...FRAME_META, prompt_tokens: 200, completion_tokens: 80 }, // no total_tokens
       latencyMs: 50,
       requestId: 'req-total-derived',
     });
@@ -210,7 +220,7 @@ describe('recordUsage — happy path', () => {
       userId,
       session,
       usage: {
-        prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
+        ...FRAME_META, prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
         // no iterations
       },
       latencyMs: 50,
@@ -247,7 +257,7 @@ describe('recordUsage — skip rules (no-op, no row written)', () => {
     await recordUsage({
       userId,
       session,
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      usage: { ...FRAME_META, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
       latencyMs: 50,
       requestId: 'skip-zero-total',
     });
@@ -258,7 +268,7 @@ describe('recordUsage — skip rules (no-op, no row written)', () => {
     await recordUsage({
       userId,
       session: null,
-      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      usage: { ...FRAME_META, prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
       latencyMs: 100,
       requestId: 'skip-no-session',
     });
@@ -288,7 +298,7 @@ describe('recordUsage — fail-silent on persistence errors', () => {
       await recordUsage({
         userId: 'not-an-id',
         session,
-        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        usage: { ...FRAME_META, prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
         latencyMs: 100,
         requestId: 'fail-cast',
       });
@@ -312,6 +322,7 @@ describe('recordUsage — costUsd reflects llmPricing.calcCost', () => {
       userId,
       session,
       usage: {
+        ...FRAME_META,
         prompt_tokens: 2_000,
         completion_tokens: 800,
         total_tokens: 2_800,
@@ -325,5 +336,128 @@ describe('recordUsage — costUsd reflects llmPricing.calcCost', () => {
       inputTokens: 2_000, outputTokens: 800, cachedTokens: 500,
     });
     expect(r.costUsd).toBeCloseTo(expected, 12);
+  });
+});
+
+// ===========================================================================
+// Wire-contract enforcement — provider/model come from the frame, not env.
+// Hard-fail on missing fields; errored=true on unknown pricing.
+// (Ola CRM #98 N4 / decisions §3 — no silent error)
+// ===========================================================================
+
+describe('recordUsage — wire schema enforcement (#98)', () => {
+  test('missing provider in frame → no row written, console.error fires', async () => {
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await recordUsage({
+      userId,
+      session,
+      usage: {
+        // provider intentionally absent
+        model: 'gemini-3.1-flash-lite-preview',
+        prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
+      },
+      latencyMs: 100,
+      requestId: 'reject-no-provider',
+    });
+    expect(await LlmUsage.countDocuments({ requestId: 'reject-no-provider' })).toBe(0);
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('frame missing provider/model'),
+    );
+    errSpy.mockRestore();
+  });
+
+  test('missing model in frame → no row written, console.error fires', async () => {
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await recordUsage({
+      userId,
+      session,
+      usage: {
+        provider: 'gemini',
+        // model intentionally absent
+        prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
+      },
+      latencyMs: 100,
+      requestId: 'reject-no-model',
+    });
+    expect(await LlmUsage.countDocuments({ requestId: 'reject-no-model' })).toBe(0);
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('frame missing provider/model'),
+    );
+    errSpy.mockRestore();
+  });
+
+  test('empty-string provider treated as missing → skip', async () => {
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await recordUsage({
+      userId,
+      session,
+      usage: {
+        provider: '',
+        model: 'gemini-3.1-flash-lite-preview',
+        prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
+      },
+      latencyMs: 100,
+      requestId: 'reject-empty-provider',
+    });
+    expect(await LlmUsage.countDocuments({ requestId: 'reject-empty-provider' })).toBe(0);
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
+  test('unknown provider:model → 1 row written with errored=true, costUsd=0', async () => {
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await recordUsage({
+      userId,
+      session,
+      usage: {
+        provider: 'fakeprovider',
+        model: 'unknown-model-2099',
+        prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
+      },
+      latencyMs: 100,
+      requestId: 'unknown-pricing',
+    });
+    const r = await LlmUsage.findOne({ requestId: 'unknown-pricing' }).lean();
+    expect(r).not.toBeNull();
+    expect(r.errored).toBe(true);
+    expect(r.costUsd).toBe(0);
+    expect(r.provider).toBe('fakeprovider');
+    expect(r.model).toBe('unknown-model-2099');
+    // Token counts still preserved for analytics
+    expect(r.inputTokens).toBe(100);
+    expect(r.outputTokens).toBe(50);
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('unknown pricing for fakeprovider:unknown-model-2099'),
+    );
+    errSpy.mockRestore();
+  });
+
+  test('frame provider/model are used verbatim — env vars are ignored', async () => {
+    // Set env vars to obviously-wrong values; frame should win.
+    const origProvider = process.env.NANOBOT_PROVIDER;
+    const origModel = process.env.NANOBOT_MODEL;
+    process.env.NANOBOT_PROVIDER = 'WRONG_PROVIDER_FROM_ENV';
+    process.env.NANOBOT_MODEL = 'wrong-model-from-env';
+    try {
+      await recordUsage({
+        userId,
+        session,
+        usage: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          prompt_tokens: 100, completion_tokens: 50, total_tokens: 150,
+        },
+        latencyMs: 100,
+        requestId: 'env-ignored',
+      });
+      const r = await LlmUsage.findOne({ requestId: 'env-ignored' }).lean();
+      expect(r.provider).toBe('openai');
+      expect(r.model).toBe('gpt-4o-mini');
+      expect(r.errored).toBe(false); // openai:gpt-4o-mini is in PRICING table
+      expect(r.costUsd).toBeGreaterThan(0);
+    } finally {
+      process.env.NANOBOT_PROVIDER = origProvider;
+      process.env.NANOBOT_MODEL = origModel;
+    }
   });
 });

@@ -39,7 +39,11 @@ bootstrap correctly:
 │
 └── nanobot/  (or  Ola_bot/)        ← MUST be a sibling of crm/
     └── NOTE: Use SeekMi-Technologies/Ola_bot, NOT upstream HKUDS/nanobot.
-        We carry Ola-specific patches on branch `ola-dev`.
+        Branch model:
+          - `ola-dev`   : development cumulative — local dev runs from here
+          - `ola-main`  : production stable (repo default) — deployment uses this
+          - `main`      : HKUDS upstream mirror — only touched on upstream sync
+        Release flow: PR `ola-dev` → `ola-main` once changes are reviewed.
 
 ~/.nanobot/                         ← provisioned by start-dev.sh on first boot
 ├── config.json                     ← rendered from ola/nanobot.config.template.json
@@ -96,6 +100,8 @@ that reverse-proxies `/api/*` to backend, plus 2 sibling boxes for nanobot
 brew install node@20 git
 # (Optional, only if Ask Ola interaction needed — wzh/yili usually skip)
 brew install python@3.11 uv
+# (Optional, only for sales-coach audio transcription — full-stack devs only)
+brew install ffmpeg
 
 # Verify:
 node --version    # → v20.x.x
@@ -203,6 +209,16 @@ bash stop-dev.sh
 
 Same as the wzh/yili 8-step quickstart above, plus:
 
+- **Step 1 — install `ffmpeg`** (`brew install ffmpeg`). Required for the
+  sales-coach audio transcription pipeline — `transcribe_audio` tool runs
+  `ffmpeg` to compress large recordings to mono 16k MP3 so they fit under
+  OpenAI's 25 MB upload cap. Without it, audio over 20 MB or any WAV/FLAC
+  input fails with a specific error from the tool.
+- **Step 3 — add `OPENAI_API_KEY` to `backend/.env`** (or
+  `.secrets/SERVERS.env`, see secrets section below). Required when
+  exercising sales-coach: nanobot's `OpenAITranscriptionProvider` reads it
+  from env. Get from
+  [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
 - **Step 4 IS required** — `.env` (project root) needs `MCP_BIND_ADDR=127.0.0.1`
   for local docker compose / prod-stack staging. Other engineers don't need
   to copy this from anywhere; just create the file with that one line:
@@ -341,6 +357,12 @@ Copy `backend/.env.example` to `backend/.env` and fill these four:
 | `MCP_SERVICE_TOKEN` | Loopback-only service token. Dev machines share the same value (ask zyd). Prod generates its own via `openssl rand -hex 32`. |
 | `GEMINI_API_KEY` | Personal key from [aistudio.google.com](https://aistudio.google.com) — do **not** share or commit. |
 
+**Sales-coach audio transcription** (full-stack only, optional for UI-only work):
+
+| Variable | Where to get it |
+|---|---|
+| `OPENAI_API_KEY` | Personal key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys). Required for `transcribe_audio` tool — used by sales-coach pipeline via `gpt-4o-transcribe-diarize`. Future GPT-5.5 fallback reuses the same key. |
+
 Optional: `GOTENBERG_URL`, `RESEND_API`, `ALLOWED_ORIGINS`
 (see `backend/.env.example`).
 
@@ -407,6 +429,54 @@ machine personalization, use `USER.md` (first-boot only, never clobbered).
   different value from dev.
 - **GEMINI_API_KEY**: rotate at [aistudio.google.com](https://aistudio.google.com),
   update `backend/.env`, restart. No other files to touch.
+- **OPENAI_API_KEY**: rotate at
+  [platform.openai.com/api-keys](https://platform.openai.com/api-keys),
+  update `.secrets/SERVERS.env` (canonical), propagate to Box2 (where nanobot
+  runs) via SSH `nano /root/<wherever .env lives> && systemctl restart nanobot`.
+  Production same single source-of-truth pattern as `MCP_SERVICE_TOKEN`.
+
+## Linux production install (Aliyun ECS)
+
+Box2 (the nanobot host) runs `python -m nanobot serve` directly under
+systemd/screen — **not** via the Dockerfile in the nanobot repo. So
+system dependencies must be installed on the host. For Ubuntu / Debian
+images (the standard Aliyun ECS choice for Python AI workloads):
+
+```bash
+# As root or via sudo. Use Aliyun's apt mirror for HK / China speed.
+apt-get update
+apt-get install -y --no-install-recommends \
+  ffmpeg \
+  python3.12 python3.12-venv python3-pip \
+  git curl ca-certificates
+
+# Verify ffmpeg
+ffmpeg -version | head -1   # → ffmpeg version 6.x or later
+which ffmpeg                # → /usr/bin/ffmpeg
+```
+
+For Alibaba Cloud Linux 3 / CentOS Stream / RHEL 9:
+
+```bash
+dnf install -y epel-release
+dnf install -y ffmpeg python3.12 python3.12-pip git curl
+# (ffmpeg sometimes requires RPM Fusion on RHEL 9 — `dnf install -y \
+#  https://download1.rpmfusion.org/free/el/rpmfusion-free-release-9.noarch.rpm`)
+```
+
+If you ever switch Box2 to running nanobot via Docker (using
+`nanobot/Dockerfile`), `ffmpeg` is already in the image — no host install
+needed.
+
+**Existing Box1/Box2 reality check** (run after onboarding a host):
+
+```bash
+ssh root@<box2-ip> 'ffmpeg -version | head -1 && python3 --version'
+```
+
+A missing `ffmpeg` will silently degrade sales-coach: short MP3 inputs
+under 20 MB still transcribe, but any WAV/FLAC or large file returns
+"file requires compression... ffmpeg is not installed on the host".
 
 ## What lives where (mental model)
 
@@ -424,4 +494,4 @@ machine personalization, use `USER.md` (first-boot only, never clobbered).
 | `~/.nanobot/workspace/memory/` | no | runtime agent memory — per machine |
 | `~/.nanobot/workspace/sessions/` | no | chat session logs — per machine |
 | `~/.nanobot/config.json` | no (mode 600) | rendered config with real `MCP_SERVICE_TOKEN` + `GEMINI_API_KEY` substituted in |
-| `../nanobot/` (sibling) | (separate repo) | NanoBot Python AI backbone — `SeekMi-Technologies/Ola_bot` fork, branch `ola-dev` |
+| `../nanobot/` (sibling) | (separate repo) | NanoBot Python AI backbone — `SeekMi-Technologies/Ola_bot` fork. `ola-dev` for dev / `ola-main` for prod (repo default). PR `ola-dev` → `ola-main` to release |

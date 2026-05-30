@@ -4,8 +4,15 @@
 // added for Issue #131 / backlog L6. The other block types are exercised
 // indirectly through usage; this file focuses on the new wiring.
 
-import { describe, test, expect, afterEach } from 'vitest';
+import { describe, test, expect, afterEach, vi } from 'vitest';
 import { render, fireEvent, cleanup } from '@testing-library/react';
+
+// ThinkingPanel (transitively rendered by MessageBubble) now uses
+// useLanguage. Mock it so these tests don't require a Redux Provider.
+vi.mock('@/locale/useLanguage', () => ({
+  default: () => (key) => key,
+}));
+
 import MessageBubble from '../MessageBubble';
 
 afterEach(cleanup);

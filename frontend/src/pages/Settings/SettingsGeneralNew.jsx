@@ -4,9 +4,13 @@ import { GlobalOutlined } from '@ant-design/icons';
 import { request } from '@/request';
 import Loading from '@/components/Loading';
 import { COUNTRY_OPTIONS } from '@/utils/countryOptions';
-import CompanyLogoField from '@/modules/SettingModule/components/CompanyLogoField';
+// === MVP-HIDDEN: Logo 上传功能本轮不实现 ===
+// import CompanyLogoField from '@/modules/SettingModule/components/CompanyLogoField';
+// === END MVP-HIDDEN ===
+import useLanguage from '@/locale/useLanguage';
 
 export default function SettingsGeneral() {
+  const translate = useLanguage();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -28,7 +32,7 @@ export default function SettingsGeneral() {
       }
     } catch (error) {
       console.error('Failed to fetch settings', error);
-      message.error('Failed to load company settings');
+      message.error(translate('Failed to load company settings'));
     } finally {
       setFetching(false);
     }
@@ -48,13 +52,13 @@ export default function SettingsGeneral() {
       });
 
       if (response.success) {
-        message.success('Company settings updated successfully!');
+        message.success(translate('Company settings updated successfully!'));
       } else {
-        message.error(response.message || 'Failed to update settings');
+        message.error(response.message || translate('Failed to update settings'));
       }
     } catch (error) {
       console.error('Update settings error:', error);
-      message.error('An error occurred while updating settings');
+      message.error(translate('An error occurred while updating settings'));
     } finally {
       setLoading(false);
     }
@@ -62,16 +66,18 @@ export default function SettingsGeneral() {
 
   return (
     <div className="general-settings-section">
-      <h1 className="general-settings-title">Company Settings</h1>
+      <h1 className="general-settings-title">{translate('Company Settings')}</h1>
       <p className="general-settings-subtitle">
-        Manage your company information
+        {translate('Manage your company information')}
       </p>
 
       <hr className="general-settings-divider" />
 
       <Loading isLoading={fetching}>
         <div className="general-company-block">
-          <CompanyLogoField />
+          {/* === MVP-HIDDEN: Logo 上传功能本轮不实现 === */}
+          {/* <CompanyLogoField /> */}
+          {/* === END MVP-HIDDEN === */}
           <Form
             form={form}
             layout="vertical"
@@ -81,69 +87,69 @@ export default function SettingsGeneral() {
             <div className="general-fields-row">
               <Form.Item
                 name="company_name"
-                label={<span className="general-field-label">Company Name</span>}
+                label={<span className="general-field-label">{translate('Company Name')}</span>}
                 className="general-field-group"
                 rules={[{ required: true, message: 'Company name is required' }]}
               >
-                <Input className="general-field-input" size="large" placeholder="Enter company name" />
+                <Input className="general-field-input" size="large" placeholder={translate('Enter company name')} />
               </Form.Item>
 
               <Form.Item
                 name="company_email"
-                label={<span className="general-field-label">Company Email</span>}
+                label={<span className="general-field-label">{translate('Company Email')}</span>}
                 className="general-field-group"
                 rules={[{ type: 'email', message: 'Enter a valid email' }]}
               >
-                <Input className="general-field-input" size="large" placeholder="Enter company email" />
+                <Input className="general-field-input" size="large" placeholder={translate('Enter company email')} />
               </Form.Item>
             </div>
 
             <div className="general-fields-row">
               <Form.Item
                 name="company_phone"
-                label={<span className="general-field-label">Company Phone</span>}
+                label={<span className="general-field-label">{translate('Company Phone')}</span>}
                 className="general-field-group"
               >
-                <Input className="general-field-input" size="large" placeholder="Enter phone number" />
+                <Input className="general-field-input" size="large" placeholder={translate('Enter phone number')} />
               </Form.Item>
 
               <Form.Item
                 name="company_website"
-                label={<span className="general-field-label">Company Website</span>}
+                label={<span className="general-field-label">{translate('Company Website')}</span>}
                 className="general-field-group"
               >
-                <Input className="general-field-input" size="large" placeholder="Enter website URL" />
+                <Input className="general-field-input" size="large" placeholder={translate('Enter website URL')} />
               </Form.Item>
             </div>
 
             <div className="general-fields-row">
               <Form.Item
                 name="company_address"
-                label={<span className="general-field-label">Company Address</span>}
+                label={<span className="general-field-label">{translate('Company Address')}</span>}
                 className="general-field-group"
               >
-                <Input className="general-field-input" size="large" placeholder="Enter address" />
+                <Input className="general-field-input" size="large" placeholder={translate('Enter address')} />
               </Form.Item>
 
               <Form.Item
                 name="company_state"
-                label={<span className="general-field-label">State</span>}
+                label={<span className="general-field-label">{translate('State')}</span>}
                 className="general-field-group"
               >
-                <Input className="general-field-input" size="large" placeholder="Enter state" />
+                <Input className="general-field-input" size="large" placeholder={translate('Enter state')} />
               </Form.Item>
             </div>
 
             <div className="general-fields-row">
               <Form.Item
                 name="company_country"
-                label={<span className="general-field-label">Country</span>}
+                label={<span className="general-field-label">{translate('Country')}</span>}
                 className="general-field-group"
                 rules={[{ required: true, message: 'Company country is required' }]}
               >
                 <Select
                   showSearch
-                  placeholder="Select your country"
+                  placeholder={translate('Select your country')}
                   optionFilterProp="label"
                   options={COUNTRY_OPTIONS}
                   size="large"
@@ -154,34 +160,34 @@ export default function SettingsGeneral() {
 
               <Form.Item
                 name="company_tax_number"
-                label={<span className="general-field-label">Tax Number</span>}
+                label={<span className="general-field-label">{translate('Tax Number')}</span>}
                 className="general-field-group"
               >
-                <Input className="general-field-input" size="large" placeholder="Enter tax number" />
+                <Input className="general-field-input" size="large" placeholder={translate('Enter tax number')} />
               </Form.Item>
             </div>
 
             <div className="general-fields-row">
               <Form.Item
                 name="company_vat_number"
-                label={<span className="general-field-label">VAT Number</span>}
+                label={<span className="general-field-label">{translate('VAT Number')}</span>}
                 className="general-field-group"
               >
-                <Input className="general-field-input" size="large" placeholder="Enter VAT number" />
+                <Input className="general-field-input" size="large" placeholder={translate('Enter VAT number')} />
               </Form.Item>
 
               <Form.Item
                 name="company_reg_number"
-                label={<span className="general-field-label">Registration Number</span>}
+                label={<span className="general-field-label">{translate('Registration Number')}</span>}
                 className="general-field-group"
               >
-                <Input className="general-field-input" size="large" placeholder="Enter registration number" />
+                <Input className="general-field-input" size="large" placeholder={translate('Enter registration number')} />
               </Form.Item>
             </div>
 
             <Form.Item style={{ marginTop: '32px' }}>
               <Button type="primary" htmlType="submit" size="large" loading={loading}>
-                Save Changes
+                {translate('Save Changes')}
               </Button>
             </Form.Item>
           </Form>

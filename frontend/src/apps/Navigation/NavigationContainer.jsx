@@ -91,7 +91,12 @@ function Sidebar({ collapsible, isMobile = false }) {
         {
           key: 'askola',
           icon: <SmileOutlined />,
-          label: <Link to={'/askola'}>Ask Ola</Link>,
+          label: <Link to={'/askola'}>{translate('Ask Ola')}</Link>,
+        },
+        {
+          key: 'file',
+          icon: <FileOutlined />,
+          label: <Link to={'/file'}>{translate('file')}</Link>,
         },
       ],
     },

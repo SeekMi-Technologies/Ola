@@ -4,12 +4,16 @@ const { v4: uuidv4 } = require('uuid');
 const { toolEventsToBlocks } = require('./toolResultToBlocks');
 const { labelFor, STAGE_LABELS } = require('./thinkingLabels');
 const recordUsage = require('@/controllers/appControllers/llmUsageController/recordUsage');
+const { collapseJobStatus } = require('@/utils/collapseJobStatus');
 
 const ChatSession = mongoose.model('ChatSession');
 const ChatMessage = mongoose.model('ChatMessage');
+const FileModel = mongoose.model('File');
+const JobModel = mongoose.model('Job');
 
-// Read env at request time so tests / hot-reload can override per call.
-const NANOBOT_TIMEOUT_MS = 120000;
+// 900s default accommodates agent loops with multiple MCP tool calls.
+const NANOBOT_TIMEOUT_MS =
+  parseInt(process.env.NANOBOT_TIMEOUT_MS, 10) || 900000;
 function nanobotEndpoint() {
   return {
     host: process.env.NANOBOT_HOST || '127.0.0.1',
@@ -23,10 +27,6 @@ function nanobotEndpoint() {
 // ---------------------------------------------------------------------------
 
 function writeSSE(res, eventName, data) {
-  // No backpressure handling: res.write() can return false on a full TCP
-  // send buffer, but for a single chat session with short SSE frames the
-  // queue stays small. If we ever fan out one stream to many slow clients,
-  // revisit (likely use res.flush() + drain event).
   res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
@@ -73,38 +73,73 @@ function makeSSEParser(onFrame) {
 }
 
 // ---------------------------------------------------------------------------
-// Auto-title (unchanged from prior implementation, just relocated).
+// Auto-title — non-streaming /v1/chat/completions call. Token spend is tracked
+// under channel='ask-ola-autotitle' so the dashboard can split user-facing
+// chat cost from incidental LLM costs (Ola CRM #98 C5).
 // ---------------------------------------------------------------------------
 
-function generateTitle(session, messages) {
+function generateTitle(session, messages, userId) {
   const conversation = messages
     .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
     .join('\n');
   const prompt = `Based on this conversation, generate a short title (max 6 words, no quotes, no punctuation at the end). Reply with ONLY the title, nothing else.\n\n${conversation}`;
-  const payload = JSON.stringify({ messages: [{ role: 'user', content: prompt }] });
+  // Scope the autoTitle request to its own session_id so the conversation
+  // text embedded in `prompt` doesn't leak into the global api_default.jsonl
+  // (multi-tenant isolation; pre-Plan-B-v3 bug — fixed phase C).
+  const payload = JSON.stringify({
+    messages: [{ role: 'user', content: prompt }],
+    session_id: `${session.nanobotSessionId}:autotitle`,
+  });
   const { host, port } = nanobotEndpoint();
   const options = {
     hostname: host,
     port,
     path: '/v1/chat/completions',
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload),
+      // Mirrors main chat path (#185). Without this nanobot routes the autotitle
+      // subagent's jsonl to admins/_system/sessions/ — leaking conversation text
+      // (which is embedded in the prompt) across the multi-tenant boundary.
+      'X-Ola-Acting-As': userId.toString(),
+    },
     timeout: 30000,
   };
+  const titleStartTs = Date.now();
+  const titleRequestId = uuidv4();
   const titleReq = http.request(options, (titleRes) => {
     let data = '';
     titleRes.on('data', (chunk) => { data += chunk; });
     titleRes.on('end', () => {
+      let parsed;
       try {
-        const parsed = JSON.parse(data);
-        const title = parsed.choices?.[0]?.message?.content?.trim();
-        if (title && title.length > 0 && title.length <= 100) {
-          ChatSession.findByIdAndUpdate(session._id, { title, updated: Date.now() }).catch((err) => {
-            console.error(`[AutoTitle] Failed to update session ${session._id}:`, err.message);
-          });
-        }
+        parsed = JSON.parse(data);
       } catch (err) {
         console.error(`[AutoTitle] Failed to parse title response for session ${session._id}:`, err.message);
+        return;
+      }
+      const title = parsed?.choices?.[0]?.message?.content?.trim();
+      if (title && title.length > 0 && title.length <= 100) {
+        ChatSession.findByIdAndUpdate(session._id, { title, updated: Date.now() }).catch((err) => {
+          console.error(`[AutoTitle] Failed to update session ${session._id}:`, err.message);
+        });
+      }
+      // Record auto-title token spend under its own channel so the dashboard
+      // can split it from user-visible chat cost. Fire-and-forget; recordUsage
+      // is fail-silent. Only fires when nanobot supplied a real usage payload
+      // with provider/model — if the response was malformed or pre-N4 nanobot
+      // (no real usage), recordUsage's wire-contract check skips silently.
+      if (userId && parsed && typeof parsed.usage === 'object') {
+        recordUsage({
+          userId,
+          session,
+          messageId: null,
+          usage: parsed.usage,
+          latencyMs: Date.now() - titleStartTs,
+          requestId: titleRequestId,
+          channel: 'ask-ola-autotitle',
+        });
       }
     });
   });
@@ -115,14 +150,48 @@ function generateTitle(session, messages) {
   titleReq.end();
 }
 
-function maybeAutoTitle(session, userMessage, assistantContent) {
+// ---------------------------------------------------------------------------
+// fileIds validation + hint construction
+// ---------------------------------------------------------------------------
+// Validates each fileId belongs to the acting admin and is not removed, then
+// collapses Job.status to the agent-facing vocabulary (ready/processing/done/
+// failed) via collapseJobStatus. Returns either {ok:true, fileRefs} (array of
+// `id=X name="Y" status="Z"` strings to splice into the user hint), or
+// {ok:false, status, message} for the controller to short-circuit on.
+// ---------------------------------------------------------------------------
+
+async function validateAndCollapseFileRefs(fileIds, userId) {
+  const fileRefs = [];
+  for (const fid of fileIds) {
+    if (typeof fid !== 'string' || !mongoose.isValidObjectId(fid)) {
+      return { ok: false, status: 404, message: '文件不存在或无权访问' };
+    }
+    const file = await FileModel.findOne({
+      _id: fid,
+      createdBy: userId,
+      removed: false,
+    });
+    if (!file) {
+      return { ok: false, status: 404, message: '文件不存在或无权访问' };
+    }
+    let job = null;
+    if (file.transcriptionJobId) {
+      job = await JobModel.findById(file.transcriptionJobId).select('status').lean();
+    }
+    const status = collapseJobStatus(job);
+    fileRefs.push(`id=${file._id} name="${file.originalName}" status="${status}"`);
+  }
+  return { ok: true, fileRefs };
+}
+
+function maybeAutoTitle(session, userMessage, assistantContent, userId) {
   if (session.title !== 'New Chat') return;
   ChatMessage.countDocuments({ sessionId: session._id, removed: false })
     .then((count) => {
       if (count >= 4) {
         return ChatMessage.find({ sessionId: session._id, removed: false })
           .sort({ created: 1 }).lean()
-          .then((msgs) => generateTitle(session, msgs));
+          .then((msgs) => generateTitle(session, msgs, userId));
       }
     })
     .catch((err) => console.error(`[AutoTitle] count/find failed for session ${session._id}:`, err.message));
@@ -136,13 +205,25 @@ function maybeAutoTitle(session, userMessage, assistantContent) {
 // ---------------------------------------------------------------------------
 
 const chat = async (req, res) => {
-  const { message, sessionId } = req.body;
+  const { message, sessionId, fileIds = [] } = req.body;
 
   if (!message || typeof message !== 'string' || message.trim() === '') {
     return res.status(400).json({
       success: false,
       result: null,
       message: 'message 字段为必填项，且不能为空字符串',
+    });
+  }
+
+  console.log(
+    `[askola.chat] admin=${req.admin._id} session=${sessionId || 'new'} msg_len=${message.length} fileIds=${Array.isArray(fileIds) ? fileIds.length : 'INVALID'}`
+  );
+
+  if (!Array.isArray(fileIds)) {
+    return res.status(400).json({
+      success: false,
+      result: null,
+      message: 'fileIds 必须是 string 数组',
     });
   }
 
@@ -163,6 +244,19 @@ const chat = async (req, res) => {
     session = await ChatSession.create({ userId, nanobotSessionId, createdBy: userId });
   }
 
+  // Plan B v3: chat.js is hint-only — validate ownership, collapse status,
+  // emit `[available files: ...]` preface. Transcript fetch + status probe
+  // happen via MCP file.* tools (agent-driven, SOUL.md doctrine).
+  const fileValidation = await validateAndCollapseFileRefs(fileIds, userId);
+  if (!fileValidation.ok) {
+    return res.status(fileValidation.status).json({
+      success: false,
+      result: null,
+      message: fileValidation.message,
+    });
+  }
+  const fileRefs = fileValidation.fileRefs;
+
   // Switch to SSE mode.
   res.status(200);
   res.setHeader('Content-Type', 'text/event-stream');
@@ -171,10 +265,6 @@ const chat = async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no'); // hint to nginx not to buffer
   res.flushHeaders();
 
-  // Accumulators for stream-end persistence + final `done` frame payload.
-  // Each step's `ts` is reserved for future relative-timing UI (e.g. "step 2
-  // took 320ms"); not yet rendered, but persisted so we don't have to
-  // backfill schema later. Drop only if we decide that surface stays out.
   const thinkingSteps = []; // [{label, ts}] — drives thinking_trace block
   const finalToolEvents = []; // phase==='end' payloads → toolEventsToBlocks → widgets
   let streamedText = '';
@@ -196,7 +286,16 @@ const chat = async (req, res) => {
   // (line ~252) intentionally stores the RAW user text without the directive
   // so the chat history UI never displays the marker.
   const sessionLang = req.admin?.language === 'en' ? 'en' : 'zh';
-  const directedContent = `[SESSION_LANG=${sessionLang}]\n\n${message.trim()}`;
+  const availableFilesHint =
+    fileRefs.length > 0
+      ? [`[available files for tool calls: ${fileRefs.join(', ')}]`]
+      : [];
+  const directedContent = [
+    `[SESSION_LANG=${sessionLang}]`,
+    ...availableFilesHint,
+    '',
+    message.trim(),
+  ].join('\n');
 
   const proxyPayload = JSON.stringify({
     messages: [{ role: 'user', content: directedContent }],
@@ -214,11 +313,7 @@ const chat = async (req, res) => {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(proxyPayload),
       'Accept': 'text/event-stream',
-      // ISO5c (issue #185): pass logged-in admin._id so nanobot's MCP HTTP
-      // calls inject X-Acting-As; MCP server then scopes business tools to
-      // this admin instead of falling back to systemAdmin. End-to-end:
-      //   browser cookie → req.admin._id → here → nanobot api/server.py
-      //   → set_acting_as → contextvar → mcp.py event_hook → MCP server
+      // X-Acting-As scopes MCP business tools to logged-in admin (#185)
       'X-Ola-Acting-As': userId.toString(),
     },
     timeout: NANOBOT_TIMEOUT_MS,
@@ -241,11 +336,12 @@ const chat = async (req, res) => {
       return;
     }
     if (eventName === 'usage') {
-      // Real per-turn token counts from NanoBot (Ola issue #98). Capture only
-      // — write to LLMUsage happens in finishStream() so it cannot delay the
-      // user-visible SSE response. Older nanobot versions never send this
-      // frame; capturedUsage stays null and recordUsage skips silently.
-      try { capturedUsage = JSON.parse(dataStr); } catch { /* drop malformed */ }
+      // Per-turn token counts from NanoBot (#98). Captured here, written in finishStream so SSE isn't delayed.
+      try {
+        capturedUsage = JSON.parse(dataStr);
+      } catch (e) {
+        console.warn('[askola] malformed event:usage frame dropped:', dataStr);
+      }
       return;
     }
     // Default event = OpenAI chat.completion.chunk
@@ -312,7 +408,7 @@ const chat = async (req, res) => {
               errored: upstreamErrored,
             });
           }
-          return maybeAutoTitle(session, message.trim(), streamedText);
+          return maybeAutoTitle(session, message.trim(), streamedText, userId);
         })
         .catch((err) => {
           console.error(
@@ -405,3 +501,6 @@ const chat = async (req, res) => {
 };
 
 module.exports = chat;
+// Internal helpers exported for unit testing (Ola CRM #98 C5 — auto-title
+// usage tracking). Not part of the public chat controller surface.
+module.exports.__test__ = { generateTitle, maybeAutoTitle };

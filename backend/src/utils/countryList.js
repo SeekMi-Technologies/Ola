@@ -720,11 +720,6 @@ const listTimeZones = [
     timeZones: ['Asia/Damascus'],
   },
   {
-    code: 'TW',
-    countryName: 'Taiwan',
-    timeZones: ['Asia/Taipei'],
-  },
-  {
     code: 'TJ',
     countryName: 'Tajikistan',
     timeZones: ['Asia/Dushanbe'],

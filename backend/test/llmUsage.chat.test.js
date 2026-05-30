@@ -108,10 +108,24 @@ function nanoTextChunk(content) {
   };
   return `data: ${JSON.stringify(payload)}\n\n`;
 }
+// =============================================================================
+// WIRE CONTRACT — keep in lockstep with nanobot/api/server.py:_sse_usage
+// =============================================================================
+// This MUST mirror what real nanobot emits 1:1. If schema drifts, the real-
+// stack integration test (backend/test/integration/test_llm_usage.sh) will
+// fail and silently let bad rows land in mongo. Don't mock around it; fix
+// either side until the contract holds.
+// Required keys: provider, model, prompt_tokens, completion_tokens,
+// total_tokens, iterations. Optional: cached_tokens (default 0).
+const FRAME_META = {
+  provider: 'gemini',
+  model: 'gemini-3.1-flash-lite-preview',
+};
 function nanoUsageFrame(usage) {
-  // Matches _sse_usage in nanobot/api/server.py — flat object, "iterations"
-  // sibling field. CRM olaController/chat.js stores the entire JSON dict.
-  return `event: usage\ndata: ${JSON.stringify(usage)}\n\n`;
+  // Spreads FRAME_META so every test gets the wire-required provider/model
+  // unless it's explicitly testing a missing/empty case (in which case it
+  // should pass an object that overrides them).
+  return `event: usage\ndata: ${JSON.stringify({ ...FRAME_META, ...usage })}\n\n`;
 }
 const NANO_DONE = `data: [DONE]\n\n`;
 
@@ -337,6 +351,36 @@ describe('chat — graceful fallback when NanoBot does not emit usage', () => {
     const r = await mongoose.model('LlmUsage').findOne({}).lean();
     expect(r).toBeTruthy();
     expect(r.totalTokens).toBe(150);
+  });
+
+  test('frame missing provider field → no LLMUsage row, console.error fires', async () => {
+    // Wire-contract enforcement (#98 C3): a malformed frame missing the
+    // required `provider` field is rejected by recordUsage, so no row lands
+    // in mongo. This guards against silently writing rows with default
+    // provider values when nanobot ever rolls back to a version that
+    // doesn't emit the field.
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    nanoBotResponder = (_req, res) => {
+      startSSE(res);
+      res.write(nanoTextChunk('reply'));
+      // Bypass the FRAME_META spread by constructing the frame directly.
+      res.write(`event: usage\ndata: ${JSON.stringify({
+        model: 'gemini-3.1-flash-lite-preview',  // provider intentionally missing
+        prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, iterations: 1,
+      })}\n\n`);
+      res.write(NANO_DONE);
+      res.end();
+    };
+    const app = buildChatApp();
+    const res = await request(app).post('/api/ola/chat').send({ message: 'hi' });
+    expect(res.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await mongoose.model('LlmUsage').countDocuments({})).toBe(0);
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('frame missing provider/model'),
+    );
+    errSpy.mockRestore();
   });
 });
 

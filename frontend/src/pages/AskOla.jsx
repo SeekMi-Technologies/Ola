@@ -3,6 +3,7 @@ import { notification } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import request from '@/request/request';
 import { useAppContext } from '@/context/appContext';
+import useLanguage from '@/locale/useLanguage';
 import MessageBubble from '@/components/AskOla/MessageBubble';
 import ChatInput from '@/components/AskOla/ChatInput';
 import ThinkingPanel from '@/components/AskOla/ThinkingPanel';
@@ -10,6 +11,7 @@ import TextBlock from '@/components/AskOla/blocks/TextBlock';
 import { consumeSSEStream } from '@/components/AskOla/consumeSSEStream';
 
 export default function AskOla() {
+  const translate = useLanguage();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   // Live streaming UI state — replaces hardcoded "Ola is thinking..." placeholder.
@@ -25,6 +27,12 @@ export default function AskOla() {
   // send can cancel a stale stream — otherwise the still-streaming `done`
   // frame would silently re-open the previous session (PR #171 review bug).
   const abortRef = useRef(null);
+  // When handleSend completes a fresh new-chat turn it calls setActive(newId),
+  // which would otherwise re-fire the load-messages effect and clobber the
+  // locally-rendered [user, assistant] pair with a server fetch that returns
+  // the same content under different ids — React then remounts every bubble
+  // (key change) and the user sees their own message "swallowed" for a frame.
+  const skipNextLoadRef = useRef(false);
   const { state: stateApp, appContextAction } = useAppContext();
   const { activeSessionId } = stateApp;
   const { chatSession } = appContextAction;
@@ -52,19 +60,23 @@ export default function AskOla() {
         setMessages(loaded);
       } else {
         notification.error({
-          message: '无法加载历史消息',
-          description: response.message || '会话消息加载失败，请刷新重试',
+          message: translate('Cannot load history messages'),
+          description: response.message || translate('Failed to load session messages, please refresh'),
         });
       }
     } catch (err) {
       notification.error({
-        message: '无法加载历史消息',
-        description: err.message || '网络错误',
+        message: translate('Cannot load history messages'),
+        description: err.message || translate('Network error'),
       });
     }
-  }, []);
+  }, [translate]);
 
   useEffect(() => {
+    if (skipNextLoadRef.current) {
+      skipNextLoadRef.current = false;
+      return;
+    }
     loadMessages(activeSessionId);
   }, [activeSessionId, loadMessages]);
 
@@ -76,14 +88,14 @@ export default function AskOla() {
         chatSession.setList(response.result);
       } else {
         notification.error({
-          message: '无法刷新会话列表',
-          description: response.message || '请刷新页面重试',
+          message: translate('Cannot refresh session list'),
+          description: response.message || translate('Please refresh the page'),
         });
       }
     } catch (err) {
       notification.error({
-        message: '无法刷新会话列表',
-        description: err.message || '网络错误',
+        message: translate('Cannot refresh session list'),
+        description: err.message || translate('Network error'),
       });
     }
   };
@@ -96,8 +108,36 @@ export default function AskOla() {
     setMessages([]);
   };
 
+  // Fired by ChatInput when an attached file finishes transcription
+  // (or hits dedup — already-transcribed). Drops a system message into the
+  // chat panel so the user sees confirmation before sending their question.
+  const handleTranscriptionComplete = ({ fileId, originalName, durationMs, sidecarBytes, deduped }) => {
+    const seconds = durationMs ? Math.round(durationMs / 1000) : null;
+    const sizeKb = sidecarBytes ? (sidecarBytes / 1024).toFixed(1) : null;
+    const detail = [
+      seconds !== null ? `${seconds}s` : null,
+      sizeKb !== null ? `${sizeKb}KB transcript` : null,
+    ].filter(Boolean).join(' · ');
+    const text = deduped
+      ? translate('Recording "{name}" already transcribed (reused from earlier upload). You can ask me about it now.')
+          .replace('{name}', originalName)
+      : translate('Recording "{name}" transcription complete{detail}. You can ask me about it now.')
+          .replace('{name}', originalName)
+          .replace('{detail}', detail ? ` (${detail})` : '');
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg_system_${fileId}_${Date.now()}`,
+        role: 'system',
+        timestamp: new Date().toISOString(),
+        blocks: [{ type: 'text', content: text }],
+      },
+    ]);
+  };
+
   const handleSend = async (messageContent) => {
     const text = messageContent.text;
+    const fileIds = Array.isArray(messageContent.attachments) ? messageContent.attachments : [];
 
     // Cancel any previous in-flight stream defensively (e.g. user spam-clicks
     // send before the previous turn finishes).
@@ -113,12 +153,13 @@ export default function AskOla() {
     };
     setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
-    setLiveLabel('Ola is thinking...');  // STAGE_LABELS.__init__ (kept in sync with backend)
+    setLiveLabel(translate('Ola is thinking...'));  // STAGE_LABELS.__init__ (kept in sync with backend)
     setStreamingText('');
 
     try {
       const body = { message: text };
       if (activeSessionId) body.sessionId = activeSessionId;
+      if (fileIds.length > 0) body.fileIds = fileIds;
 
       // EventSource doesn't support POST bodies, so we use fetch + manual SSE
       // parsing. Same approach the OpenAI / Anthropic / Google JS SDKs use.
@@ -138,7 +179,7 @@ export default function AskOla() {
           const j = await resp.json();
           if (j && j.message) errMsg = j.message;
         } catch { /* keep default */ }
-        notification.error({ message: 'Ola 响应失败', description: errMsg });
+        notification.error({ message: translate('Ola response failed'), description: errMsg });
         return;
       }
 
@@ -165,8 +206,8 @@ export default function AskOla() {
         error: (data) => {
           errored = true;
           notification.error({
-            message: 'Ola 响应失败',
-            description: (data && data.message) || '未知错误',
+            message: translate('Ola response failed'),
+            description: (data && data.message) || translate('Unknown error'),
           });
         },
       }, ac.signal);
@@ -188,6 +229,9 @@ export default function AskOla() {
         setMessages((prev) => [...prev, assistantMessage]);
 
         if (!activeSessionId && finalSessionId) {
+          // Mark the upcoming activeSessionId-change effect as a no-op — the
+          // local messages array is already authoritative for this turn.
+          skipNextLoadRef.current = true;
           chatSession.setActive(finalSessionId);
         }
         refreshSessionList();
@@ -196,8 +240,8 @@ export default function AskOla() {
       // AbortError on cancel is expected; suppress the user-facing toast.
       if (err.name === 'AbortError' || ac.signal.aborted) return;
       notification.error({
-        message: '无法连接 Ola',
-        description: err.message || '请确认后端服务和 NanoBot 是否正常运行',
+        message: translate('Cannot connect to Ola'),
+        description: err.message || translate('Please verify backend and NanoBot are running'),
       });
     } finally {
       // Only clear if this is still the active stream — a newer handleSend may
@@ -218,10 +262,14 @@ export default function AskOla() {
       {isEmpty ? (
         <div className="askola-chat-welcome">
           <div className="askola-chat-center">
-            <h1 className="askola-chat-greeting">What can I do for you?</h1>
+            <h1 className="askola-chat-greeting">{translate('What can I do for you?')}</h1>
           </div>
           <div className="askola-chat-input-wrapper">
-            <ChatInput onSend={handleSend} disabled={loading} />
+            <ChatInput
+              onSend={handleSend}
+              onTranscriptionComplete={handleTranscriptionComplete}
+              disabled={loading}
+            />
           </div>
         </div>
       ) : (
@@ -246,13 +294,17 @@ export default function AskOla() {
           </div>
 
           <div className="askola-chat-input-wrapper">
-            <ChatInput onSend={handleSend} disabled={loading} />
+            <ChatInput
+              onSend={handleSend}
+              onTranscriptionComplete={handleTranscriptionComplete}
+              disabled={loading}
+            />
           </div>
         </>
       )}
 
       {/* New Chat button — always visible */}
-      <button className="askola-new-chat-btn" onClick={handleNewChat} title="New Chat">
+      <button className="askola-new-chat-btn" onClick={handleNewChat} title={translate('New Chat')}>
         <PlusOutlined />
       </button>
     </div>

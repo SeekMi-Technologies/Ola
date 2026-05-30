@@ -893,11 +893,6 @@ export const countryList = [
     timeZone: ['Asia/Damascus'],
   },
   {
-    value: 'TW',
-    label: 'Taiwan',
-    timeZone: ['Asia/Taipei'],
-  },
-  {
     value: 'TJ',
     label: 'Tajikistan',
     timeZone: ['Asia/Dushanbe'],

@@ -1,10 +1,21 @@
-import { Layout, Tooltip } from 'antd';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Layout } from 'antd';
+// === MVP-HIDDEN: Tooltip / useNavigate 仅供已隐藏的三点 Setting 按钮使用 ===
+// import { Tooltip } from 'antd';
+// === END MVP-HIDDEN ===
+import { useLocation } from 'react-router-dom';
+// === MVP-HIDDEN: useNavigate 仅供已隐藏的三点 Setting 按钮使用 ===
+// import { useNavigate } from 'react-router-dom';
+// === END MVP-HIDDEN ===
 import { useEffect } from 'react';
 import { useAppContext } from '@/context/appContext';
+import useLanguage from '@/locale/useLanguage';
+import LanguageToggle from '@/components/LanguageToggle';
 
 import {
-  QuestionCircleOutlined,
+  // === MVP-HIDDEN: Help / 3-dot Setting 按钮已注释掉 ===
+  // QuestionCircleOutlined,
+  // EllipsisOutlined,
+  // === END MVP-HIDDEN ===
   SmileOutlined,
   DashboardOutlined,
   // === MVP-HIDDEN: 以下 icon 对应已隐藏的页面 ===
@@ -29,7 +40,6 @@ import {
   UserOutlined,
   CheckSquareOutlined,
   HistoryOutlined,
-  EllipsisOutlined,
   PlusOutlined,
 } from '@ant-design/icons';
 
@@ -73,7 +83,10 @@ function getPageInfo(pathname) {
 export default function HeaderContent() {
   const { Header } = Layout;
   const location = useLocation();
-  const navigate = useNavigate();
+  // === MVP-HIDDEN: navigate 仅供已隐藏的三点 Setting 按钮使用 ===
+  // const navigate = useNavigate();
+  // === END MVP-HIDDEN ===
+  const translate = useLanguage();
   const pageInfo = getPageInfo(location.pathname);
   const { state: stateApp, appContextAction } = useAppContext();
   const { isOlaPanelOpen } = stateApp;
@@ -101,7 +114,7 @@ export default function HeaderContent() {
     >
       <div className="header-page-title">
         <span className="header-page-icon">{pageInfo.icon}</span>
-        <span className="header-page-label">{pageInfo.label}</span>
+        <span className="header-page-label">{translate(pageInfo.label)}</span>
       </div>
 
       <div className="header-right-actions">
@@ -109,34 +122,44 @@ export default function HeaderContent() {
           <>
             <button className="header-action-btn" onClick={() => { appContextAction.chatSession.setActive(null); }}>
               <PlusOutlined />
-              <span>New Chat</span>
+              <span>{translate('New Chat')}</span>
             </button>
             <button className="header-action-btn header-action-btn--ola" onClick={() => appContextAction.historyModal.open()}>
               <HistoryOutlined />
-              <span>History</span>
+              <span>{translate('History')}</span>
             </button>
-            <button
+            {/* === MVP-HIDDEN: AskOla 页不需要语言切换 === */}
+            {/* <LanguageToggle variant="header" /> */}
+            {/* === END MVP-HIDDEN === */}
+            {/* === MVP-HIDDEN: 三点 Setting 按钮已隐藏（指向的 SettingsAskOla 页本轮不需要） === */}
+            {/* <button
               className="header-action-btn"
               onClick={() => navigate('/settings/edit/ask_ola')}
               style={{ padding: '0 8px', minWidth: 'auto', border: 'none', background: 'transparent', boxShadow: 'none' }}
             >
-              <Tooltip title="Setting" placement="bottom">
+              <Tooltip title={translate('Setting')} placement="bottom">
                 <EllipsisOutlined rotate={90} style={{ fontSize: '18px', color: '#8c8c8c' }} />
               </Tooltip>
-            </button>
+            </button> */}
+            {/* === END MVP-HIDDEN === */}
           </>
         ) : (
           <>
-            <button className="header-action-btn">
+            <LanguageToggle variant="header" />
+            {/* === MVP-HIDDEN: Help 按钮无实际功能 === */}
+            {/* <button className="header-action-btn">
               <QuestionCircleOutlined />
-              <span>Help</span>
-            </button>
-            {!isOlaPanelOpen && (
+              <span>{translate('Help')}</span>
+            </button> */}
+            {/* === END MVP-HIDDEN === */}
+            {/* === MVP-HIDDEN: 侧弹 Ask Ola 面板已隐藏（用左侧导航的 Ask Ola 链接进入主页面） === */}
+            {/* {!isOlaPanelOpen && (
               <button className="header-action-btn header-action-btn--ola" onClick={() => olaPanel.open()}>
                 <SmileOutlined />
-                <span>Ask Ola</span>
+                <span>{translate('Ask Ola')}</span>
               </button>
-            )}
+            )} */}
+            {/* === END MVP-HIDDEN === */}
           </>
         )}
       </div>

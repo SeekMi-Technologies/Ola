@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { LoadingOutlined, DownOutlined, RightOutlined } from '@ant-design/icons';
+import useLanguage from '@/locale/useLanguage';
 
 /**
  * ThinkingPanel — Ask Ola live progress + post-answer collapsed trace
@@ -29,6 +30,7 @@ export default function ThinkingPanel({
   currentLabel = null,
   steps = [],
 }) {
+  const translate = useLanguage();
   const [expanded, setExpanded] = useState(false);
 
   if (mode === 'live') {
@@ -40,7 +42,7 @@ export default function ThinkingPanel({
       >
         <LoadingOutlined spin style={{ fontSize: 13, color: '#8c8c8c' }} />
         <span className="askola-thinking-panel-label">
-          {currentLabel || 'Ola is working on it...'}
+          {currentLabel || translate('Ola is working on it...')}
         </span>
       </div>
     );
@@ -59,7 +61,7 @@ export default function ThinkingPanel({
       >
         {expanded ? <DownOutlined /> : <RightOutlined />}
         <span className="askola-thinking-panel-toggle-label">
-          {' '}View thinking process
+          {' '}{translate('View thinking process')}
         </span>
       </button>
       {expanded && (

@@ -17,8 +17,10 @@ import { request } from '@/request';
 import AuthModule from '@/modules/AuthModule';
 import Loading from '@/components/Loading';
 import { COUNTRY_OPTIONS } from '@/utils/countryOptions';
+import useLanguage from '@/locale/useLanguage';
 
 export default function Onboarding() {
+  const translate = useLanguage();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
@@ -27,8 +29,8 @@ export default function Onboarding() {
   const navigate = useNavigate();
 
   const steps = [
-    { title: 'About You', icon: <UserOutlined /> },
-    { title: 'Your Company', icon: <BankOutlined /> },
+    { title: translate('About You'), icon: <UserOutlined /> },
+    { title: translate('Your Company'), icon: <BankOutlined /> },
   ];
 
   const handleNext = async () => {
@@ -57,7 +59,7 @@ export default function Onboarding() {
       });
 
       if (response.success) {
-        message.success('Welcome to Ola! 🎉');
+        message.success(translate('Welcome to Ola!'));
 
         const auth_state = {
           current: response.result,
@@ -95,7 +97,7 @@ export default function Onboarding() {
         >
           {/* Step 1: About You */}
           <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
-            <Form.Item label="Email">
+            <Form.Item label={translate('Email')}>
               <Input
                 prefix={<MailOutlined className="site-form-item-icon" />}
                 value={currentUser?.email || ''}
@@ -104,18 +106,18 @@ export default function Onboarding() {
               />
             </Form.Item>
 
-            <Form.Item name="phone" label="Phone">
+            <Form.Item name="phone" label={translate('Phone')}>
               <Input
                 prefix={<PhoneOutlined className="site-form-item-icon" />}
-                placeholder="+86 xxx xxxx xxxx"
+                placeholder={translate('+86 xxx xxxx xxxx')}
                 size="large"
               />
             </Form.Item>
 
-            <Form.Item name="jobTitle" label="Job Title">
+            <Form.Item name="jobTitle" label={translate('Job Title')}>
               <Input
                 prefix={<UserOutlined className="site-form-item-icon" />}
-                placeholder="e.g. Sales Manager"
+                placeholder={translate('e.g. Sales Manager')}
                 size="large"
               />
             </Form.Item>
@@ -127,7 +129,7 @@ export default function Onboarding() {
                 onClick={handleNext}
                 size="large"
               >
-                Continue
+                {translate('Continue')}
               </Button>
             </Form.Item>
           </div>
@@ -136,24 +138,24 @@ export default function Onboarding() {
           <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>
             <Form.Item
               name="companyName"
-              label="Company Name"
+              label={translate('Company Name')}
               rules={[{ required: true, message: 'Company name is required' }]}
             >
               <Input
                 prefix={<BankOutlined className="site-form-item-icon" />}
-                placeholder="Your company's legal name"
+                placeholder={translate("Your company's legal name")}
                 size="large"
               />
             </Form.Item>
 
             <Form.Item
               name="companyCountry"
-              label="Country"
+              label={translate('Country')}
               rules={[{ required: true, message: 'Please select your country' }]}
             >
               <Select
                 showSearch
-                placeholder="Select your country"
+                placeholder={translate('Select your country')}
                 optionFilterProp="label"
                 options={COUNTRY_OPTIONS}
                 size="large"
@@ -161,35 +163,35 @@ export default function Onboarding() {
               />
             </Form.Item>
 
-            <Form.Item name="companyAddress" label="Company Address">
+            <Form.Item name="companyAddress" label={translate('Company Address')}>
               <Input
                 prefix={<EnvironmentOutlined className="site-form-item-icon" />}
-                placeholder="Street address, city, postal code"
+                placeholder={translate('Street address, city, postal code')}
                 size="large"
               />
             </Form.Item>
 
             <Form.Item
               name="companyPhone"
-              label="Company Phone"
+              label={translate('Company Phone')}
             >
               <Input
                 prefix={<PhoneOutlined className="site-form-item-icon" />}
-                placeholder="Office phone"
+                placeholder={translate('Office phone')}
                 size="large"
               />
             </Form.Item>
 
             <Form.Item
               name="companyEmail"
-              label="Company Email"
+              label={translate('Company Email')}
               rules={[
                 { type: 'email', message: 'Please enter a valid email' },
               ]}
             >
               <Input
                 prefix={<MailOutlined className="site-form-item-icon" />}
-                placeholder="contact@company.com"
+                placeholder={translate('contact@company.com')}
                 size="large"
               />
             </Form.Item>
@@ -197,10 +199,10 @@ export default function Onboarding() {
             <Form.Item style={{ marginTop: 30 }}>
               <div style={{ display: 'flex', gap: '16px' }}>
                 <Button onClick={handleBack} size="large" style={{ flex: 1 }}>
-                  Back
+                  {translate('Back')}
                 </Button>
                 <Button type="primary" onClick={handleSubmit} loading={loading} size="large" style={{ flex: 2 }}>
-                  Complete Workspace
+                  {translate('Complete Workspace')}
                 </Button>
               </div>
             </Form.Item>
@@ -210,7 +212,7 @@ export default function Onboarding() {
     );
   };
 
-  const title = currentStep === 0 ? 'Welcome to Ola! 👋' : 'Almost there! 🏢';
+  const title = currentStep === 0 ? translate('Welcome to Ola!') : translate('Almost there!');
 
   return <AuthModule authContent={<FormContainer />} AUTH_TITLE={title} />;
 }

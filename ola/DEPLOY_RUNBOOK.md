@@ -156,7 +156,9 @@ Duke SSH 到 Box2：
 
 1. 装 python 3.11+、git、pip3、build-essentials
 2. 按 `ola/SETUP.md` 第二段走：
-   - `git clone https://github.com/SeekMi-Technologies/nanobot ~/nanobot`
+   - `git clone https://github.com/SeekMi-Technologies/Ola_bot ~/nanobot`
+   - **生产部署必须 checkout `ola-main` 分支** (repo default)：
+     `cd ~/nanobot && git checkout ola-main && git pull origin ola-main`
    - 进 `~/nanobot`，`pip install -r requirements.txt` (or `uv sync`)
    - 创建 `~/.nanobot/` workspace，按 SETUP.md 配 config
 3. 启动方式（选一）：

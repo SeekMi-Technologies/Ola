@@ -1,57 +1,53 @@
-const getLabel = (key) => {
-  try {
-    const lowerCaseKey = key
-      .toLowerCase()
-      .replace(/[^a-zA-Z0-9]/g, '_')
-      .replace(/ /g, '_');
+import { useCallback } from 'react';
+import { useSelector } from 'react-redux';
+import languages from './translation/translation';
+import { selectLang } from '@/redux/lang/selectors';
+import { DEFAULT_LANG } from '@/redux/lang/reducer';
 
-    // if (lang[lowerCaseKey]) return lang[lowerCaseKey];
+const FALLBACK_LANG = 'en';
 
-    // convert no found language label key to label
+const normalize = (key) =>
+  String(key).toLowerCase().replace(/[^a-z0-9]/g, '_');
 
-    const remove_underscore_fromKey = key.replace(/_/g, ' ').split(' ');
+const titleCase = (key) =>
+  String(key)
+    .replace(/_/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.substring(1))
+    .join(' ');
 
-    const conversionOfAllFirstCharacterofEachWord = remove_underscore_fromKey.map(
-      (word) => word[0].toUpperCase() + word.substring(1)
-    );
-
-    const label = conversionOfAllFirstCharacterofEachWord.join(' ');
-
-    const result = window.localStorage.getItem('lang');
-    if (!result) {
-      let list = {};
-      list[lowerCaseKey] = label;
-      window.localStorage.setItem('lang', JSON.stringify(list));
-    } else {
-      let list = { ...JSON.parse(result) };
-      list[lowerCaseKey] = label;
-      window.localStorage.removeItem('lang');
-      window.localStorage.setItem('lang', JSON.stringify(list));
-    }
-    // console.error(
-    //   '🇩🇿 🇧🇷 🇻🇳 🇮🇩 🇨🇳 Language Label Warning : translate("' +
-    //     lowerCaseKey +
-    //     '") failed to get label for this key : ' +
-    //     lowerCaseKey +
-    //     ' please review your language config file and add this label'
-    // );
-    return label;
-  } catch (error) {
-    // console.error(
-    //   '🚨 error getting this label : translate("' +
-    //     key +
-    //     '") failed to get label for this key : ' +
-    //     key +
-    //     ' please review your language config file and add this label'
-    // );
-    return 'No translate';
-  }
+// undefined = key absent from dict. Empty string '' is a legitimate
+// translation and must be returned as-is, so we check !== undefined
+// rather than truthiness.
+const lookup = (rawKey, dict) => {
+  if (!dict) return undefined;
+  if (dict[rawKey] !== undefined) return dict[rawKey];
+  const normalized = normalize(rawKey);
+  if (dict[normalized] !== undefined) return dict[normalized];
+  return undefined;
 };
 
+// Returned function is memoized on `lang` so callers can safely put `translate`
+// in a useCallback / useEffect dependency array without re-firing every render.
+// (Pre-memo version caused AskOla to refetch /ola/session/messages on every
+// streamed token, which visibly clobbered the local user-message bubble.)
 const useLanguage = () => {
-  const translate = (value) => getLabel(value);
+  const lang = useSelector(selectLang) || DEFAULT_LANG;
 
-  return translate;
+  return useCallback(
+    (rawKey) => {
+      const dict = languages[lang] || {};
+      const fallback = languages[FALLBACK_LANG] || {};
+      if (rawKey === null || rawKey === undefined || rawKey === '') return '';
+      const hit = lookup(rawKey, dict);
+      if (hit !== undefined) return hit;
+      const fb = lookup(rawKey, fallback);
+      if (fb !== undefined) return fb;
+      return titleCase(rawKey);
+    },
+    [lang],
+  );
 };
 
 export default useLanguage;

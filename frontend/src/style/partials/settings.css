@@ -3446,3 +3446,12 @@
   background: #fdfdfd;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
 }
+
+.settings-sidebar-version {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 11px;
+  color: #999;
+  letter-spacing: 0.3px;
+  user-select: none;
+}

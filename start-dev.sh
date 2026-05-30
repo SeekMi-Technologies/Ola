@@ -24,7 +24,10 @@ echo "=== Ola CRM Dev Startup ==="
 echo ""
 
 # Kill any existing processes on our ports
-for PORT in 8888 8889 8900 3000; do
+# 8901 (nanobot gateway) included after Plan B v3 phase G — old gateway
+# instances from previous start-dev.sh runs held 8901, causing new gateway
+# spawn to crash with EADDRINUSE while serve/backend silently restarted.
+for PORT in 8888 8889 8900 8901 3000; do
   PID=$(lsof -ti:$PORT 2>/dev/null || true)
   if [ -n "$PID" ]; then
     echo -e "${YELLOW}Killing existing process on port $PORT (PID: $PID)${NC}"
@@ -42,37 +45,56 @@ if [ ! -f "$CRM_DIR/backend/.env" ]; then
   exit 1
 fi
 
-# First-boot: render ~/.nanobot/config.json from the vendored template.
-# Idempotent — skips if config already exists, so local runtime state
-# (memory/, sessions/) and any manual edits to config survive restarts.
-# GEMINI_API_KEY only needs to be in backend/.env on the FIRST boot; after
-# that nanobot reads the key from ~/.nanobot/config.json directly, so
-# existing machines (where config is already provisioned) don't need to
-# backfill their .env.
-if [ ! -f "$HOME/.nanobot/config.json" ]; then
-  mkdir -p "$HOME/.nanobot"
-  (cd "$CRM_DIR/backend" && node -e '
-    require("dotenv").config();
-    const fs = require("fs"), os = require("os"), path = require("path");
-    const { MCP_SERVICE_TOKEN, GEMINI_API_KEY } = process.env;
-    const missing = [];
-    if (!MCP_SERVICE_TOKEN) missing.push("MCP_SERVICE_TOKEN");
-    if (!GEMINI_API_KEY)    missing.push("GEMINI_API_KEY");
-    if (missing.length) {
-      console.error("[provision] Missing in backend/.env: " + missing.join(", ") + " — see ola/SETUP.md");
-      process.exit(1);
-    }
-    const tpl = fs.readFileSync(process.argv[1], "utf8");
-    const rendered = tpl
-      .replace(/\$\{MCP_SERVICE_TOKEN\}/g, MCP_SERVICE_TOKEN)
-      .replace(/\$\{GEMINI_API_KEY\}/g, GEMINI_API_KEY);
-    const dest = path.join(os.homedir(), ".nanobot", "config.json");
-    fs.writeFileSync(dest, rendered, { mode: 0o600 });
-  ' "$CRM_DIR/ola/nanobot.config.template.json")
-  echo -e "     ${GREEN}Rendered ~/.nanobot/config.json (mode 600)${NC}"
-else
-  echo -e "     ${YELLOW}~/.nanobot/config.json already exists, skipping${NC}"
+# Export secrets to shell so all child processes (backend, MCP, nanobot serve,
+# nanobot gateway, frontend) inherit them via 12-factor process env. Mirrors
+# prod systemd EnvironmentFile= / docker-compose env_file: pattern.
+set -a
+source "$CRM_DIR/backend/.env"
+if [ -f "$CRM_DIR/.secrets/SERVERS.env" ]; then
+  source "$CRM_DIR/.secrets/SERVERS.env"
 fi
+set +a
+
+# #266 Item 3 — fail-fast if backend/.env declares OLA_ENV=prod. Local dev
+# must never point at the production Atlas cluster: cross-env writes pollute
+# the shared DB with host-specific paths and other dev artifacts (see #266
+# Bug 3+4 for the original incident). Prod boxes set OLA_ENV=prod in their
+# .env; local dev leaves it unset OR sets =dev.
+if [ "${OLA_ENV:-dev}" = "prod" ]; then
+  echo -e "${RED}REFUSING TO START: backend/.env has OLA_ENV=prod.${NC}"
+  echo -e "${YELLOW}start-dev.sh is for local development only. Set OLA_ENV=dev (or unset it)${NC}"
+  echo -e "${YELLOW}in backend/.env before running this script. See #266 for context.${NC}"
+  exit 1
+fi
+
+# Always-overwrite render of ~/.nanobot/config.json. Single source of truth
+# is the vendored template + secrets; manual edits to ~/.nanobot/config.json
+# WILL be clobbered on next start (matches the SOUL/AGENTS/TOOLS pattern
+# below). Edit ola/nanobot.config.template.json or .secrets/SERVERS.env
+# instead. Runtime state (memory/, sessions/) lives in sibling files and is
+# untouched.
+mkdir -p "$HOME/.nanobot"
+(cd "$CRM_DIR/backend" && node -e '
+  const path = require("path");
+  require("dotenv").config();
+  require("dotenv").config({ path: path.join(process.argv[2], ".secrets/SERVERS.env") });
+  const fs = require("fs"), os = require("os");
+  const required = [
+    "MCP_SERVICE_TOKEN", "GEMINI_API_KEY",
+    "ZOHO_OLA_EMAIL", "ZOHO_OLA_APP_PASSWORD",
+    "ZOHO_IMAP_HOST", "ZOHO_SMTP_HOST",
+  ];
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.error("[provision] Missing env vars: " + missing.join(", ") + " — check backend/.env and .secrets/SERVERS.env");
+    process.exit(1);
+  }
+  const tpl = fs.readFileSync(process.argv[1], "utf8");
+  const rendered = tpl.replace(/\$\{(\w+)\}/g, (_, k) => process.env[k] || "");
+  const dest = path.join(os.homedir(), ".nanobot", "config.json");
+  fs.writeFileSync(dest, rendered, { mode: 0o600 });
+' "$CRM_DIR/ola/nanobot.config.template.json" "$CRM_DIR")
+echo -e "     ${GREEN}Rendered ~/.nanobot/config.json (mode 600, always-overwrite)${NC}"
 
 # Sync Ola workspace prompts into ~/.nanobot/workspace/.
 # Two categories with different sync rules:
@@ -87,6 +109,12 @@ for f in SOUL.md AGENTS.md TOOLS.md; do
     cp "$CRM_DIR/ola/nanobot-workspace/$f" "$HOME/.nanobot/workspace/$f"
   fi
 done
+# Sync workspace skills (always-overwrite for canonical Ola skills)
+if [ -d "$CRM_DIR/ola/nanobot-workspace/skills" ]; then
+  rm -rf "$HOME/.nanobot/workspace/skills"
+  cp -R "$CRM_DIR/ola/nanobot-workspace/skills" "$HOME/.nanobot/workspace/"
+  echo -e "     ${GREEN}Synced canonical skills/ → ~/.nanobot/workspace/skills/${NC}"
+fi
 echo -e "     ${GREEN}Synced canonical prompts (SOUL/AGENTS/TOOLS) → ~/.nanobot/workspace/${NC}"
 for f in USER.md HEARTBEAT.md; do
   if [ ! -f "$HOME/.nanobot/workspace/$f" ] && [ -f "$CRM_DIR/ola/nanobot-workspace/$f" ]; then
@@ -133,15 +161,24 @@ for i in $(seq 1 15); do
   fi
 done
 
-# 3. NanoBot
+# 3. NanoBot — two processes:
+#   serve   (8900) — OpenAI-compat /v1/chat/completions for askola web
+#   gateway (8901) — ChannelManager (email/etc) + cron + heartbeat
+# These are mutually exclusive in a single process; channels never start
+# under serve mode. Both share the same ~/.nanobot/config.json + workspace.
 if [ -d "$NANOBOT_DIR" ]; then
-  echo -e "${GREEN}[4/5] Starting NanoBot (port 8900)...${NC}"
+  echo -e "${GREEN}[4a/5] Starting NanoBot serve (port 8900) — askola chat completions...${NC}"
   cd "$NANOBOT_DIR"
   python -m nanobot serve > /tmp/ola-nanobot.log 2>&1 &
   NANOBOT_PID=$!
+
+  echo -e "${GREEN}[4b/5] Starting NanoBot gateway (port 8901) — channels (email/etc)...${NC}"
+  python -m nanobot gateway --port 8901 > /tmp/ola-nanobot-gateway.log 2>&1 &
+  NANOBOT_GATEWAY_PID=$!
 else
   echo -e "${YELLOW}[4/5] NanoBot directory not found at $NANOBOT_DIR, skipping${NC}"
   NANOBOT_PID=""
+  NANOBOT_GATEWAY_PID=""
 fi
 
 # 4. Frontend
@@ -164,12 +201,15 @@ check_port() {
   fi
 }
 
-check_port 8888 "Backend " "backend"
-check_port 8889 "MCP     " "mcp"
+check_port 8888 "Backend         " "backend"
+check_port 8889 "MCP             " "mcp"
 if [ -n "$NANOBOT_PID" ]; then
-  check_port 8900 "NanoBot " "nanobot"
+  check_port 8900 "NanoBot serve   " "nanobot"
 fi
-check_port 3000 "Frontend" "frontend"
+if [ -n "$NANOBOT_GATEWAY_PID" ]; then
+  check_port 8901 "NanoBot gateway " "nanobot-gateway"
+fi
+check_port 3000 "Frontend        " "frontend"
 
 echo ""
 echo "Logs: /tmp/ola-{backend,mcp,nanobot,frontend}.log"

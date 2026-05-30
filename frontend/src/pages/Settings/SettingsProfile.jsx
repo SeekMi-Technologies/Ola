@@ -6,8 +6,10 @@ import { InfoCircleOutlined, UserOutlined, MailOutlined } from '@ant-design/icon
 import { selectAuth } from '@/redux/auth/selectors';
 import * as actionTypes from '@/redux/auth/types';
 import { request } from '@/request';
+import useLanguage from '@/locale/useLanguage';
 
 export default function SettingsProfile() {
+  const translate = useLanguage();
   const { current: currentUser } = useSelector(selectAuth);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -41,7 +43,7 @@ export default function SettingsProfile() {
       });
 
       if (success) {
-        message.success('Profile updated successfully!');
+        message.success(translate('Profile updated successfully!'));
 
         // Refresh auth cache from the server response (canonical post-write
         // shape — picks up language fallback default + any backend normalization).
@@ -57,11 +59,11 @@ export default function SettingsProfile() {
           dispatch({ type: actionTypes.REQUEST_SUCCESS, payload: result });
         }
       } else {
-        message.error(msg || 'Failed to update profile');
+        message.error(msg || translate('Failed to update profile'));
       }
     } catch (error) {
       console.error('Update profile error:', error);
-      message.error('An error occurred during update');
+      message.error(translate('An error occurred during update'));
     } finally {
       setLoading(false);
     }
@@ -70,13 +72,13 @@ export default function SettingsProfile() {
   return (
     <div className="profile-section">
       {/* Title */}
-      <h1 className="profile-title">Profile</h1>
-      <p className="profile-subtitle">Manage your personal details</p>
+      <h1 className="profile-title">{translate('Profile')}</h1>
+      <p className="profile-subtitle">{translate('Manage your personal details')}</p>
 
       {/* Info banner */}
       <div className="profile-info-banner">
         <InfoCircleOutlined />
-        <span>Changes to your profile will apply to all of your workspaces.</span>
+        <span>{translate('Changes to your profile will apply to all of your workspaces.')}</span>
       </div>
 
       <Form
@@ -88,7 +90,7 @@ export default function SettingsProfile() {
         <div className="profile-form-row">
           <Form.Item
             name="name"
-            label={<span className="profile-form-label">First Name</span>}
+            label={<span className="profile-form-label">{translate('First Name')}</span>}
             className="profile-form-group"
             rules={[{ required: true, message: 'First name is required' }]}
           >
@@ -97,7 +99,7 @@ export default function SettingsProfile() {
 
           <Form.Item
             name="surname"
-            label={<span className="profile-form-label">Last Name</span>}
+            label={<span className="profile-form-label">{translate('Last Name')}</span>}
             className="profile-form-group"
           >
             <Input className="profile-form-input" prefix={<UserOutlined style={{color: '#bfbfbf', marginRight: 5}}/>} />
@@ -107,7 +109,7 @@ export default function SettingsProfile() {
         <div className="profile-email-row" style={{ marginTop: '24px' }}>
           <Form.Item
             name="email"
-            label={<span className="profile-form-label">Primary email address</span>}
+            label={<span className="profile-form-label">{translate('Primary email address')}</span>}
             className="profile-form-group"
             style={{ width: '100%' }}
           >
@@ -117,10 +119,10 @@ export default function SettingsProfile() {
 
         <Form.Item
           name="language"
-          label={<span className="profile-form-label">Ask Ola language</span>}
+          label={<span className="profile-form-label">{translate('Ask Ola language')}</span>}
           className="profile-form-group"
           style={{ width: '100%', marginTop: '24px' }}
-          tooltip="Drives the language Ola uses to talk to you. Quote document language is asked separately at quote-creation time."
+          tooltip={translate('Drives the language Ola uses to talk to you. Quote document language is asked separately at quote-creation time.')}
         >
           <Select
             className="profile-time-select"
@@ -133,7 +135,7 @@ export default function SettingsProfile() {
 
         <Form.Item style={{ marginTop: '32px' }}>
           <Button type="primary" htmlType="submit" size="large" loading={loading}>
-            Save Changes
+            {translate('Save Changes')}
           </Button>
         </Form.Item>
       </Form>

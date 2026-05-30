@@ -5,6 +5,7 @@ import { reducer as crudReducer } from './crud';
 import { reducer as erpReducer } from './erp';
 import { reducer as adavancedCrudReducer } from './adavancedCrud';
 import { reducer as settingsReducer } from './settings';
+import { reducer as langReducer } from './lang';
 
 const combinedReducer = combineReducers({
   auth: authReducer,
@@ -12,6 +13,7 @@ const combinedReducer = combineReducers({
   erp: erpReducer,
   adavancedCrud: adavancedCrudReducer,
   settings: settingsReducer,
+  lang: langReducer,
 });
 
 // 登出时把整棵 redux state 重置为初始值，避免上一个账号的列表 / 设置残留在内存里

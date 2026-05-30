@@ -51,6 +51,8 @@ Ola maintains **two parallel workflow doc sets** (as of 2026-04-26):
 
 ### Branch policy
 
+**CRM (`SeekMi-Technologies/Ola`):**
+
 | User | Dev branch | Merge target |
 |---|---|---|
 | Yuandong | `ZYD_FEAT` | PR → `dev` |
@@ -59,7 +61,15 @@ Ola maintains **two parallel workflow doc sets** (as of 2026-04-26):
 | Angel (Yili) | `YILI_UI` | PR → `dev` |
 | — | `dev` → `main` | Yuandong-only, manually on GitHub |
 
-Never commit on `main` or `dev`. PRs target **`dev`**, not `main`. Before pushing, rebase on `origin/dev`.
+**nanobot (`SeekMi-Technologies/Ola_bot`, fork of HKUDS/nanobot):**
+
+| Branch | Role |
+|---|---|
+| `ola-dev` | Development cumulative — feature branches PR here, local dev runs from here |
+| `ola-main` | Production stable + repo default — deployment uses this; PR `ola-dev` → `ola-main` is the release flow |
+| `main` | HKUDS upstream mirror — touched only when syncing from upstream, never developed on |
+
+Never commit on `main` / `dev` / `ola-main`. CRM PRs target **`dev`**, not `main`. nanobot PRs target **`ola-main`** for release; intermediate feature work merges into `ola-dev` first. Before pushing, rebase on the appropriate upstream (`origin/dev` for CRM, `origin/ola-dev` for nanobot feature work).
 
 ### Hard boundaries (any mode)
 

@@ -178,7 +178,6 @@ module.exports = {
   sweden: 'Sweden',
   switzerland: 'Switzerland',
   syria: 'Syria',
-  taiwan: 'Taiwan',
   tajikistan: 'Tajikistan',
   tanzania: 'Tanzania',
   thailand: 'Thailand',
