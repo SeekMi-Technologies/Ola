@@ -14,6 +14,7 @@ import useLanguage from '@/locale/useLanguage';
 
 import Loading from '@/components/Loading';
 import AuthModule from '@/modules/AuthModule';
+import LanguageToggle from '@/components/LanguageToggle';
 
 const ResetPassword = () => {
   const translate = useLanguage();
@@ -56,6 +57,10 @@ const ResetPassword = () => {
             </Button>
             {translate('Or')} <a href="/login"> {translate('already have account Login')} </a>
           </Form.Item>
+
+          <div style={{ textAlign: 'center', marginBottom: 10 }}>
+            <LanguageToggle variant="auth" />
+          </div>
         </Form>
       </Loading>
     );

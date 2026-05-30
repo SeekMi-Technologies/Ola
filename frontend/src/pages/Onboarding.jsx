@@ -16,11 +16,13 @@ import * as actionTypes from '@/redux/auth/types';
 import { request } from '@/request';
 import AuthModule from '@/modules/AuthModule';
 import Loading from '@/components/Loading';
-import { COUNTRY_OPTIONS } from '@/utils/countryOptions';
+import { getCountryOptions } from '@/utils/countryOptions';
 import useLanguage from '@/locale/useLanguage';
+import LanguageToggle from '@/components/LanguageToggle';
 
 export default function Onboarding() {
   const translate = useLanguage();
+  const countryOptions = getCountryOptions(translate);
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
@@ -29,8 +31,8 @@ export default function Onboarding() {
   const navigate = useNavigate();
 
   const steps = [
-    { title: translate('About You'), icon: <UserOutlined /> },
-    { title: translate('Your Company'), icon: <BankOutlined /> },
+    { title: translate('about_you'), icon: <UserOutlined /> },
+    { title: translate('your_company'), icon: <BankOutlined /> },
   ];
 
   const handleNext = async () => {
@@ -59,7 +61,7 @@ export default function Onboarding() {
       });
 
       if (response.success) {
-        message.success(translate('Welcome to Ola!'));
+        message.success(translate('welcome_to_ola'));
 
         const auth_state = {
           current: response.result,
@@ -139,7 +141,7 @@ export default function Onboarding() {
             <Form.Item
               name="companyName"
               label={translate('Company Name')}
-              rules={[{ required: true, message: 'Company name is required' }]}
+              rules={[{ required: true, message: translate('company_name_is_required') }]}
             >
               <Input
                 prefix={<BankOutlined className="site-form-item-icon" />}
@@ -151,13 +153,13 @@ export default function Onboarding() {
             <Form.Item
               name="companyCountry"
               label={translate('Country')}
-              rules={[{ required: true, message: 'Please select your country' }]}
+              rules={[{ required: true, message: translate('please_select_your_country') }]}
             >
               <Select
                 showSearch
                 placeholder={translate('Select your country')}
                 optionFilterProp="label"
-                options={COUNTRY_OPTIONS}
+                options={countryOptions}
                 size="large"
                 suffixIcon={<GlobalOutlined className="site-form-item-icon" />}
               />
@@ -186,7 +188,7 @@ export default function Onboarding() {
               name="companyEmail"
               label={translate('Company Email')}
               rules={[
-                { type: 'email', message: 'Please enter a valid email' },
+                { type: 'email', message: translate('invalid_email_address') },
               ]}
             >
               <Input
@@ -202,17 +204,21 @@ export default function Onboarding() {
                   {translate('Back')}
                 </Button>
                 <Button type="primary" onClick={handleSubmit} loading={loading} size="large" style={{ flex: 2 }}>
-                  {translate('Complete Workspace')}
+                  {translate('complete_workspace')}
                 </Button>
               </div>
             </Form.Item>
           </div>
         </Form>
+
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <LanguageToggle variant="auth" />
+        </div>
       </Loading>
     );
   };
 
-  const title = currentStep === 0 ? translate('Welcome to Ola!') : translate('Almost there!');
+  const title = currentStep === 0 ? translate('welcome_to_ola') : translate('almost_there');
 
   return <AuthModule authContent={<FormContainer />} AUTH_TITLE={title} />;
 }

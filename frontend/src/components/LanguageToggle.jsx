@@ -12,6 +12,7 @@ import useLanguage from '@/locale/useLanguage';
 const VARIANT_CLASS = {
   panel: 'ola-panel-header-btn',
   header: 'header-action-btn',
+  auth: 'lang-toggle-auth',
 };
 
 const HEADER_INLINE_STYLE = {
@@ -20,6 +21,19 @@ const HEADER_INLINE_STYLE = {
   border: 'none',
   background: 'transparent',
   boxShadow: 'none',
+};
+
+const AUTH_INLINE_STYLE = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '4px 12px',
+  border: '1px solid #d9d9d9',
+  borderRadius: 6,
+  background: 'transparent',
+  cursor: 'pointer',
+  fontSize: 13,
+  color: '#8c8c8c',
 };
 
 export default function LanguageToggle({ variant = 'header' }) {
@@ -87,7 +101,8 @@ export default function LanguageToggle({ variant = 'header' }) {
   };
 
   const className = VARIANT_CLASS[variant] || VARIANT_CLASS.header;
-  const style = variant === 'header' ? HEADER_INLINE_STYLE : undefined;
+  const style =
+    variant === 'header' ? HEADER_INLINE_STYLE : variant === 'auth' ? AUTH_INLINE_STYLE : undefined;
 
   return (
     <button
@@ -97,9 +112,16 @@ export default function LanguageToggle({ variant = 'header' }) {
       aria-label={tooltipText}
       style={style}
     >
-      <Tooltip title={tooltipText} placement="bottom">
-        <TranslationOutlined style={variant === 'header' ? { fontSize: 18, color: '#8c8c8c' } : undefined} />
-      </Tooltip>
+      {variant === 'auth' ? (
+        <>
+          <TranslationOutlined />
+          <span>{tooltipText}</span>
+        </>
+      ) : (
+        <Tooltip title={tooltipText} placement="bottom">
+          <TranslationOutlined style={variant === 'header' ? { fontSize: 18, color: '#8c8c8c' } : undefined} />
+        </Tooltip>
+      )}
     </button>
   );
 }

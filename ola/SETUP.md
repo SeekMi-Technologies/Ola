@@ -6,6 +6,21 @@
 > section is intentionally complete and ordered so an agent can execute
 > it top-to-bottom without judgment calls.
 
+---
+
+## ⚠️ Two files you must create yourself — ask Yuandong for the content
+
+These two files are **gitignored and never committed**. You cannot get them from the repo — you must create them manually and ask **Yuandong (zyd)** for the content of both:
+
+| File | What to do |
+|---|---|
+| `backend/.env` | Copy `backend/.env.example` → `backend/.env`, then ask Yuandong to send you the real values for the 4 required keys (`DATABASE`, `JWT_SECRET`, `MCP_SERVICE_TOKEN`, `GEMINI_API_KEY`). |
+| `.secrets/SERVERS.env` | Create the folder and file yourself (`mkdir .secrets && touch .secrets/SERVERS.env`), then ask Yuandong to send you the full file content. This file holds all production server IPs, SSH credentials, and app secrets. |
+
+**Do not proceed with `start-dev.sh` until `backend/.env` is filled in.**
+
+---
+
 This directory makes **Ask Ola** behave as a real tool-calling agent (not a
 plain chat proxy). It contains:
 
@@ -23,10 +38,10 @@ locations** + **2 .env files**. The agent must understand all four to
 bootstrap correctly:
 
 ```
-~/dev/                              ← any directory; pick one and stick with it
-├── crm/                            ← THIS REPO (SeekMi-Technologies/Ola)
+<any parent dir>/                   ← pick any directory (e.g. ~/dev/ or ~/Desktop/)
+├── Ola/                            ← THIS REPO (SeekMi-Technologies/Ola)
 │   ├── backend/                    ← Node 20 / Express, MCP server
-│   │   ├── .env                    ← per-machine secrets, gitignored
+│   │   ├── .env                    ← per-machine secrets, gitignored — ⚠️⚠️⚠️ CREATE THIS YOURSELF ⚠️⚠️⚠️
 │   │   └── .env.example            ← template, commit ok
 │   ├── frontend/                   ← React 18 + Vite + Ant Design
 │   ├── ola/
@@ -34,10 +49,12 @@ bootstrap correctly:
 │   │   ├── nanobot.config.template.json   ← rendered into ~/.nanobot/config.json
 │   │   └── nanobot-workspace/      ← 5 .md files copied into ~/.nanobot/workspace/
 │   ├── .env                        ← project-root, only used by docker-compose
+│   ├── .secrets/                   ← ⚠️⚠️⚠️ CREATE THIS FOLDER YOURSELF ⚠️⚠️⚠️
+│   │   └── SERVERS.env             ← prod secrets + SSH creds — ⚠️⚠️⚠️ CREATE THIS FILE YOURSELF ⚠️⚠️⚠️
 │   ├── start-dev.sh                ← one-command launcher for the 4 services
 │   └── stop-dev.sh
 │
-└── nanobot/  (or  Ola_bot/)        ← MUST be a sibling of crm/
+└── Ola_bot/                        ← MUST be a sibling of Ola/
     └── NOTE: Use SeekMi-Technologies/Ola_bot, NOT upstream HKUDS/nanobot.
         Branch model:
           - `ola-dev`   : development cumulative — local dev runs from here
@@ -58,7 +75,7 @@ bootstrap correctly:
 
 **Hard rules** (will silently break if violated):
 - The two repos **must be siblings** at the same parent dir. `start-dev.sh`
-  resolves nanobot via `${CRM_DIR}/../nanobot/` or `${CRM_DIR}/../Ola_bot/`.
+  resolves nanobot via `${CRM_DIR}/../Ola_bot/` (or `../nanobot/` as fallback).
 - `~/.nanobot/` is in the user's home dir (not inside either repo). It
   persists across `git pull`s — your local agent memory + chat history
   outlive code updates.

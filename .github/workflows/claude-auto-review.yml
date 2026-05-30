@@ -1,0 +1,91 @@
+name: Claude Auto Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths-ignore:
+      - "**/*.md"
+      - "task.md"
+      - "ola/nanobot-workspace/**"
+      - "**/*.snap"
+
+jobs:
+  claude-review:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: |
+            actions: read
+          use_sticky_comment: true
+          prompt: |
+            Auto-review this Ola CRM pull request. Focus on the issues that
+            actually break Ola in production; skip generic style nitpicks.
+
+            Multi-admin data isolation (highest priority):
+            - Every business MCP tool call must carry X-Acting-As — never
+              silent fallback to systemAdmin.
+            - Backend controllers must filter by req.admin._id; createdBy on
+              new docs must equal req.admin._id, never a hardcoded id.
+            - Per-identity transports must not collapse across users
+              (no shared session reading a contextvar at request time).
+
+            Robustness red lines (block PR):
+            - No silent catch ({} or `catch(e){}`) — every catch returns a
+              specific error with status code.
+            - No setTimeout pretending to be async, no @ts-ignore /
+              eslint-disable to bypass type/lint failures.
+            - Money math must use helpers.calculate.{multiply,add,sub,mul} —
+              not native + - *.
+            - Soft-delete only (removed:true). Never physical delete on
+              Mongoose docs or drop indexes.
+            - Mongoose Schema must include removed/enabled/createdBy/
+              created/updated when introducing a new entity.
+            - Joi validation at controller entry; reject 400 on bad input
+              with a specific message (no generic 500).
+            - Response shape must be { success, result, message } on both
+              success and failure.
+
+            Security:
+            - No hardcoded secrets, no eval/exec on user input.
+            - Auth-gated routes wired through adminAuth.isValidAuthToken.
+            - All endpoints behind that middleware unless explicitly public.
+
+            Frontend:
+            - API calls must go through src/request/ — no raw fetch /
+              XMLHttpRequest.
+            - AntD only — no Material UI / Chakra / Tailwind imports.
+            - Redux through crud / advancedCrud / erp slices, not bespoke
+              local state for entity ops.
+
+            Testing:
+            - Mock-only tests of MCP / Anthropic SDK transports are
+              false-positives (Phase ISO 2026-05-06 lesson). If a test
+              mocks streamable_http_client, ClientSession, or
+              session.call_tool, flag it and recommend a real-transport
+              equivalent.
+
+            Comment style:
+            - Be terse. One short paragraph per issue.
+            - Use inline comments on specific lines for code-level issues.
+            - Use the sticky summary comment for cross-cutting findings.
+            - Skip comments on test files, fixtures, .md files, and
+              auto-generated lockfiles.
+            - If the PR looks clean, say so in one sentence — don't pad
+              with generic positives.
+          claude_args: |
+            --max-turns 30
