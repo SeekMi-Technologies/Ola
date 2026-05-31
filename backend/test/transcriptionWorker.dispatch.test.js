@@ -52,7 +52,6 @@ beforeAll(async () => {
 }, 120000);
 
 afterAll(async () => {
-  await new Promise((r) => setTimeout(r, 200));
   await mongoose.disconnect();
   if (mongo) await mongo.stop();
   fs.rmSync(TMP_DIR, { recursive: true, force: true });
@@ -179,13 +178,15 @@ test('runTranscription: env=paraformer + admin null → paraformer', async () =>
   expect(transcribeViaOpenAI).not.toHaveBeenCalled();
 });
 
-test('runTranscription: unknown provider value → throws + Job.failed', async () => {
+test('runTranscription: unknown provider value → throws, Job stays pending (resolveProvider fails outside try block)', async () => {
   process.env.TRANSCRIPTION_PROVIDER = 'whisper'; // not in VALID_PROVIDERS
   const admin = await makeAdmin({ provider: null });
   const { file, job } = await makeFileAndJob(admin._id);
 
   await expect(runTranscription(file, job)).rejects.toThrow(/Unknown transcription provider: whisper/);
-  // Provider rejection happens before status flips to running — Job stays
-  // in pending. That's correct: the dispatcher fails fast and the upload
-  // returns the fileId so caller can retry after fix.
+
+  // resolveProvider throws BEFORE the try block that flips status to 'running',
+  // so the catch that sets 'failed' never runs — Job stays 'pending'.
+  const updated = await Job.findById(job._id);
+  expect(updated.status).toBe('pending');
 });
