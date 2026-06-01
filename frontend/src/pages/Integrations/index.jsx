@@ -10,7 +10,7 @@ const INTEGRATIONS_DATA = [
   {
     id: 'google_ads',
     name: 'Google Ads',
-    connected: true,
+    connected: false,
     popular: true,
     descriptionKey: 'integration_desc_google_ads',
     logo: (
@@ -25,7 +25,7 @@ const INTEGRATIONS_DATA = [
   {
     id: 'linear',
     name: 'Linear',
-    connected: true,
+    connected: false,
     popular: true,
     descriptionKey: 'integration_desc_linear',
     logo: (
