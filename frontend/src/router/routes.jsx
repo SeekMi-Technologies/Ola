@@ -8,6 +8,7 @@ const NotFound = lazy(() => import('@/pages/NotFound.jsx'));
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const AskOla = lazy(() => import('@/pages/AskOla'));
 const FilePage = lazy(() => import('@/pages/File'));
+const Integrations = lazy(() => import('@/pages/Integrations'));
 const Customer = lazy(() => import('@/pages/Customer'));
 const Factory = lazy(() => import('@/pages/Factory'));  
 const Invoice = lazy(() => import('@/pages/Invoice'));
@@ -76,6 +77,10 @@ let routes = {
     {
       path: '/file',
       element: <FilePage />,
+    },
+    {
+      path: '/integrations',
+      element: <Integrations />,
     },
     {
       path: '/customer',

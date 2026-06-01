@@ -809,6 +809,7 @@ const lang = {
   transcript: 'Transcript',
   transcript_load_failed: 'Failed to load transcript',
   transcript_empty: 'No transcript available',
+  integrations: 'Integrations',
 };
 
 export default lang;

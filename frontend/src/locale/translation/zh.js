@@ -809,6 +809,7 @@ const lang = {
   transcript: '转录',
   transcript_load_failed: '加载转录失败',
   transcript_empty: '暂无转录内容',
+  integrations: '系统集成',
 };
 
 export default lang;
