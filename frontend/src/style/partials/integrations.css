@@ -1,0 +1,101 @@
+/* ===== Integrations Page Cards ===== */
+
+.integration-card {
+  min-height: 0 !important;
+  height: 76px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  padding: 0 20px !important;
+  overflow: hidden;
+  cursor: pointer;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #eeeeee;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.32s ease,
+              border-color 0.22s ease,
+              border-width 0.22s ease !important;
+}
+
+.integration-card.shadow:hover {
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* connected — thicker, more visible green border */
+.integration-card--connected,
+.integration-card--connected.shadow:hover {
+  border: 2.5px solid #73d13d !important;
+  box-shadow: 0 2px 10px rgba(82, 196, 26, 0.12) !important;
+}
+
+.integration-card--connected:hover {
+  box-shadow: 0 6px 20px rgba(82, 196, 26, 0.18) !important;
+}
+
+/* ---- logo: always visible, no animation ---- */
+
+.integration-card__logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 16px;
+}
+
+/* ---- text area: clips the sliding layers ---- */
+
+.integration-card__text-area {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ---- name row: slides up and out on hover ---- */
+
+.integration-card__name-row {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: transform 0.36s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.28s ease;
+}
+
+.integration-card:hover .integration-card__name-row {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+/* ---- description: slides up from below on hover ---- */
+
+.integration-card__description {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  font-family: Inter, system-ui, sans-serif;
+  font-weight: 500;
+  color: #1f1f1f;
+  line-height: 1.5;
+  overflow: hidden;
+  transform: translateY(100%);
+  opacity: 0;
+  transition: transform 0.36s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.28s ease;
+}
+
+.integration-card:hover .integration-card__description {
+  transform: translateY(0);
+  opacity: 1;
+}
