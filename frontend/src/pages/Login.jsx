@@ -14,7 +14,6 @@ import { selectAuth } from '@/redux/auth/selectors';
 import LoginForm from '@/forms/LoginForm';
 import Loading from '@/components/Loading';
 import AuthModule from '@/modules/AuthModule';
-import LanguageToggle from '@/components/LanguageToggle';
 
 const LoginPage = () => {
   const translate = useLanguage();
@@ -55,10 +54,6 @@ const LoginPage = () => {
               {translate('login')}
             </Button>
           </Form.Item>
-
-          <div style={{ textAlign: 'center', marginBottom: 10 }}>
-            <LanguageToggle variant="auth" />
-          </div>
 
           <div style={{ textAlign: 'center', marginTop: 10 }}>
             <Text>{translate('dont_have_an_account')} </Text>

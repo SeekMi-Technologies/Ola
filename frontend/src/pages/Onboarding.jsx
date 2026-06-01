@@ -18,7 +18,6 @@ import AuthModule from '@/modules/AuthModule';
 import Loading from '@/components/Loading';
 import { getCountryOptions } from '@/utils/countryOptions';
 import useLanguage from '@/locale/useLanguage';
-import LanguageToggle from '@/components/LanguageToggle';
 
 export default function Onboarding() {
   const translate = useLanguage();
@@ -124,15 +123,21 @@ export default function Onboarding() {
               />
             </Form.Item>
 
-            <Form.Item>
-              <Button
-                type="primary"
-                className="login-form-button"
-                onClick={handleNext}
-                size="large"
-              >
-                {translate('Continue')}
-              </Button>
+            <Form.Item style={{ marginTop: 30 }}>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <Button onClick={() => navigate(-1)} size="large" style={{ flex: 1 }}>
+                  {translate('Back')}
+                </Button>
+                <Button
+                  type="primary"
+                  className="login-form-button"
+                  onClick={handleNext}
+                  size="large"
+                  style={{ flex: 2 }}
+                >
+                  {translate('Continue')}
+                </Button>
+              </div>
             </Form.Item>
           </div>
 
@@ -211,9 +216,6 @@ export default function Onboarding() {
           </div>
         </Form>
 
-        <div style={{ textAlign: 'center', marginTop: 12 }}>
-          <LanguageToggle variant="auth" />
-        </div>
       </Loading>
     );
   };

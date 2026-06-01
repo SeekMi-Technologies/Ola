@@ -1,6 +1,7 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 
 import { useSelector } from 'react-redux';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { selectAuth } from '@/redux/auth/selectors';
 import { AppContextProvider } from '@/context/appContext';
 import PageLoader from '@/components/PageLoader';
@@ -22,13 +23,23 @@ const DefaultApp = () => (
 
 export default function OlaOs() {
   const { isLoggedIn, current } = useSelector(selectAuth);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // DEV ONLY: bypass login wall for UI development
   const bypassAuth = import.meta.env.VITE_DEV_BYPASS_AUTH === 'true';
 
+  const needsOnboarding = isLoggedIn && current?.onboarded === false;
+
+  useEffect(() => {
+    if (needsOnboarding && location.pathname !== '/onboarding') {
+      navigate('/onboarding', { replace: true });
+    }
+  }, [needsOnboarding, location.pathname, navigate]);
+
   // 三层路由拦截:
   // 1. 未登录 → AuthRouter（Login / Register）
-  // 2. 已登录 + 未上车 → Onboarding wizard
+  // 2. 已登录 + 未上车 → /onboarding
   // 3. 已登录 + 已上车 → DefaultApp（ErpApp）
 
   if (!isLoggedIn && !bypassAuth) {
@@ -39,10 +50,13 @@ export default function OlaOs() {
     );
   }
 
-  if (isLoggedIn && current?.onboarded === false) {
+  if (needsOnboarding) {
     return (
       <Localization>
-        <Onboarding />
+        <Routes>
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="*" element={<Navigate to="/onboarding" replace />} />
+        </Routes>
       </Localization>
     );
   }

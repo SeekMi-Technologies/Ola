@@ -10,7 +10,6 @@ import { selectAuth } from '@/redux/auth/selectors';
 import RegisterForm from '@/forms/RegisterForm';
 import Loading from '@/components/Loading';
 import AuthModule from '@/modules/AuthModule';
-import LanguageToggle from '@/components/LanguageToggle';
 
 const { Text } = Typography;
 
@@ -53,10 +52,6 @@ const RegisterPage = () => {
             </Button>
           </Form.Item>
           
-          <div style={{ textAlign: 'center', marginBottom: 10 }}>
-            <LanguageToggle variant="auth" />
-          </div>
-
           <div style={{ textAlign: 'center', marginTop: 10 }}>
             <Text>{translate('already_have_an_account')} </Text>
             <Link to="/login">{translate('login')}</Link>

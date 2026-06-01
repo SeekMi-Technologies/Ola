@@ -743,7 +743,7 @@ const lang = {
   'An error occurred during update': 'An error occurred during update',
   about_you: 'About You',
   your_company: 'Your Company',
-  welcome_to_ola: 'Welcome to Ola!',
+  welcome_to_ola: 'Welcome!',
   almost_there: 'Almost there!',
   '+86 xxx xxxx xxxx': '+1 (555) 555-5555',
   'Job Title': 'Job Title',

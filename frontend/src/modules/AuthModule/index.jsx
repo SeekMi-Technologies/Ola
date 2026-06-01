@@ -4,6 +4,7 @@ import { Layout, Col, Divider, Typography } from 'antd';
 
 import AuthLayout from '@/layout/AuthLayout';
 import SideContent from './SideContent';
+import LanguageToggle from '@/components/LanguageToggle';
 
 import logo from '@/style/images/OLA_LOGO.png';
 
@@ -35,7 +36,10 @@ const AuthModule = ({ authContent, AUTH_TITLE, isForRegistre = false }) => {
           />
           <div className="space10" />
         </Col>
-        <Title level={1}>{translate(AUTH_TITLE)}</Title>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Title level={1} style={{ margin: 0 }}>{translate(AUTH_TITLE)}</Title>
+          <LanguageToggle variant="auth" />
+        </div>
 
         <Divider />
         <div className="site-layout-content">{authContent}</div>

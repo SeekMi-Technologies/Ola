@@ -744,7 +744,7 @@ const lang = {
   'An error occurred during update': '更新过程中出现错误',
   about_you: '关于你',
   your_company: '你的公司',
-  welcome_to_ola: '欢迎来到 Ola！',
+  welcome_to_ola: '欢迎！',
   almost_there: '就快好了！',
   '+86 xxx xxxx xxxx': '+86 xxx xxxx xxxx',
   'Job Title': '职位',

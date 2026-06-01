@@ -43,14 +43,16 @@ const ForgetPassword = () => {
             <Button type="primary" htmlType="submit" className="login-form-button" size="large">
               {translate('Request new Password')}
             </Button>
-            {translate('Or')} <a href="/login"> {translate('already have account Login')} </a>
+            <div style={{ textAlign: 'center', marginTop: 8 }}>
+              {translate('Or')} <a href="/login"> {translate('already have account Login')} </a>
+            </div>
           </Form.Item>
         </Form>
       </Loading>
     );
   };
   if (!isSuccess) {
-    return <AuthModule authContent={<FormContainer />} AUTH_TITLE="Forget Password" />;
+    return <AuthModule authContent={<FormContainer />} AUTH_TITLE={translate('forget_password')} />;
   } else {
     return (
       <Result
