@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Button, Input, Space, Typography, message } from 'antd';
+import { Button, Input, message } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PageHeader } from '@ant-design/pro-layout';
 
 import { crud } from '@/redux/crud/actions';
 import { selectListItems } from '@/redux/crud/selectors';
 import useLanguage from '@/locale/useLanguage';
+import { ErpLayout } from '@/layout';
 
 import FileDataTable from './FileDataTable';
 import FileUploadModal from './FileUploadModal';
@@ -49,33 +51,39 @@ export default function FilePage() {
   };
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Typography.Title level={3} style={{ marginBottom: 16 }}>
-        {translate('file')}
-      </Typography.Title>
-
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setUploadOpen(true)}
-        >
-          {translate('upload_file')}
-        </Button>
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={refresh}
-          loading={isLoading}
-        >
-          {translate('refresh')}
-        </Button>
-        <Input.Search
-          placeholder={translate('search_by_filename')}
-          allowClear
-          style={{ width: 300 }}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </Space>
+    <ErpLayout>
+      <PageHeader
+        title={translate('file')}
+        ghost={true}
+        extra={[
+          <Input.Search
+            key="search"
+            placeholder={translate('search_by_filename')}
+            allowClear
+            style={{ width: 250 }}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />,
+          <Button
+            key="refresh"
+            icon={<ReloadOutlined />}
+            onClick={refresh}
+            loading={isLoading}
+          >
+            {translate('refresh')}
+          </Button>,
+          <Button
+            key="upload"
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setUploadOpen(true)}
+          >
+            {translate('upload_file')}
+          </Button>,
+        ]}
+        style={{
+          padding: '20px 0px',
+        }}
+      />
 
       <FileDataTable
         items={filtered}
@@ -95,6 +103,6 @@ export default function FilePage() {
         open={!!drawerFileId}
         onClose={() => setDrawerFileId(null)}
       />
-    </div>
+    </ErpLayout>
   );
 }
