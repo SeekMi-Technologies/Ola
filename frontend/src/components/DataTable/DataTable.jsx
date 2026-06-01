@@ -209,6 +209,7 @@ export default function DataTable({ config, extra = [] }) {
         scroll={{ x: true }}
         onRow={(record) => ({
           onClick: () => handleRead(record),
+          style: { cursor: 'pointer' },
         })}
       />
     </>
