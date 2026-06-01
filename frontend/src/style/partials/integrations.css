@@ -1,12 +1,12 @@
 /* ===== Integrations Page Cards ===== */
 
-.integration-card {
-  min-height: 0 !important;
-  height: 76px !important;
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  padding: 0 20px !important;
+.whiteBox.integration-card {
+  min-height: 0;
+  height: 76px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 20px;
   overflow: hidden;
   cursor: pointer;
   border-radius: 12px;
@@ -15,23 +15,23 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
   transition: box-shadow 0.32s ease,
               border-color 0.22s ease,
-              border-width 0.22s ease !important;
+              border-width 0.22s ease;
 }
 
-.integration-card.shadow:hover {
+.whiteBox.integration-card.shadow:hover {
   border: 1px solid #e0e0e0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 /* connected — thicker, more visible green border */
-.integration-card--connected,
-.integration-card--connected.shadow:hover {
-  border: 2.5px solid #73d13d !important;
-  box-shadow: 0 2px 10px rgba(82, 196, 26, 0.12) !important;
+.whiteBox.integration-card--connected,
+.whiteBox.integration-card--connected.shadow:hover {
+  border: 2.5px solid #73d13d;
+  box-shadow: 0 2px 10px rgba(82, 196, 26, 0.12);
 }
 
-.integration-card--connected:hover {
-  box-shadow: 0 6px 20px rgba(82, 196, 26, 0.18) !important;
+.whiteBox.integration-card--connected:hover {
+  box-shadow: 0 6px 20px rgba(82, 196, 26, 0.18);
 }
 
 /* ---- logo: always visible, no animation ---- */
