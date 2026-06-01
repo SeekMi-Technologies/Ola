@@ -61,7 +61,7 @@ const ResetPassword = () => {
       </Loading>
     );
   };
-  return <AuthModule authContent={<FormContainer />} AUTH_TITLE={translate('reset_password')} />;
+  return <AuthModule authContent={<FormContainer />} AUTH_TITLE="reset_password" />;
 };
 
 export default ResetPassword;

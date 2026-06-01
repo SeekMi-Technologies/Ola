@@ -57,7 +57,7 @@ const LoginPage = () => {
 
           <div style={{ textAlign: 'center', marginTop: 10 }}>
             <Text>{translate('dont_have_an_account')} </Text>
-            <Link to="/register">{translate('sign_up')}</Link>
+            <Link to="/signup">{translate('sign_up')}</Link>
           </div>
         </Form>
       </Loading>

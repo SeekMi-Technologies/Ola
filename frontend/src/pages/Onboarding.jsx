@@ -13,6 +13,7 @@ import {
 
 import { selectAuth } from '@/redux/auth/selectors';
 import * as actionTypes from '@/redux/auth/types';
+import { logout } from '@/redux/auth/actions';
 import { request } from '@/request';
 import AuthModule from '@/modules/AuthModule';
 import Loading from '@/components/Loading';
@@ -125,7 +126,7 @@ export default function Onboarding() {
 
             <Form.Item style={{ marginTop: 30 }}>
               <div style={{ display: 'flex', gap: '16px' }}>
-                <Button onClick={() => navigate(-1)} size="large" style={{ flex: 1 }}>
+                <Button onClick={() => { dispatch(logout()); navigate('/login', { replace: true }); }} size="large" style={{ flex: 1 }}>
                   {translate('Back')}
                 </Button>
                 <Button

@@ -52,7 +52,7 @@ const ForgetPassword = () => {
     );
   };
   if (!isSuccess) {
-    return <AuthModule authContent={<FormContainer />} AUTH_TITLE={translate('forget_password')} />;
+    return <AuthModule authContent={<FormContainer />} AUTH_TITLE="forget_password" />;
   } else {
     return (
       <Result
