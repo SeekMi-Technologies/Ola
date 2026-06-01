@@ -84,11 +84,18 @@ function discover() {
  *   - { ok: false } is surfaced via the MCP `isError` flag (NanoBot expects this)
  *   - thrown errors translate to a uniform INTERNAL envelope, never silently swallowed
  */
+// DeepSeek requires tool names to match ^[a-zA-Z0-9_-]+$. Our canonical
+// names use dots (e.g. "customer.search") for readability.  Sanitize at
+// registration time so the wire name is always provider-compatible.
+function sanitizeName(name) {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
 function registerAll(server) {
   const tools = discover();
   for (const tool of tools) {
     server.registerTool(
-      tool.name,
+      sanitizeName(tool.name),
       {
         title: tool.title || tool.name,
         description: tool.description || '',

@@ -2,8 +2,8 @@
   "agents": {
     "defaults": {
       "workspace": "~/.nanobot/workspace",
-      "model": "gemini-3.1-flash-lite",
-      "provider": "gemini",
+      "model": "deepseek-chat",
+      "provider": "deepseek",
       "maxTokens": 8192,
       "contextWindowTokens": 65536,
       "temperature": 0.1,
@@ -186,7 +186,7 @@
       "extraHeaders": null
     },
     "deepseek": {
-      "apiKey": "",
+      "apiKey": "${DEEPSEEK_API_KEY}",
       "apiBase": null,
       "extraHeaders": null
     },

@@ -80,7 +80,7 @@ mkdir -p "$HOME/.nanobot"
   require("dotenv").config({ path: path.join(process.argv[2], ".secrets/SERVERS.env") });
   const fs = require("fs"), os = require("os");
   const required = [
-    "MCP_SERVICE_TOKEN", "GEMINI_API_KEY",
+    "MCP_SERVICE_TOKEN", "DEEPSEEK_API_KEY",
     "ZOHO_OLA_EMAIL", "ZOHO_OLA_APP_PASSWORD",
     "ZOHO_IMAP_HOST", "ZOHO_SMTP_HOST",
   ];
@@ -160,6 +160,11 @@ for i in $(seq 1 15); do
     echo -e " ${RED}timeout${NC}"
   fi
 done
+
+# #273 — macOS system proxy (Clash on 7897) returns 403 for api.deepseek.com.
+# Bypass proxy for DeepSeek so Python urllib connects directly.
+export no_proxy="api.deepseek.com,localhost,127.0.0.1,${no_proxy:-}"
+export NO_PROXY="api.deepseek.com,localhost,127.0.0.1,${NO_PROXY:-}"
 
 # 3. NanoBot — two processes:
 #   serve   (8900) — OpenAI-compat /v1/chat/completions for askola web
