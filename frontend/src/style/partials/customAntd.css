@@ -83,8 +83,6 @@
 
 .ant-table-tbody > tr:hover > td {
   background: #fafafa !important;
-  color: #0084ff !important;
-  cursor: pointer;
 }
 
 .ant-typography strong {

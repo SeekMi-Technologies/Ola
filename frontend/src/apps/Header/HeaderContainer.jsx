@@ -46,6 +46,7 @@ import {
 const PAGE_MAP = {
   '/': { icon: <DashboardOutlined />, label: 'Dashboard' },
   '/askola': { icon: <SmileOutlined />, label: 'Ask Ola' },
+  '/file': { icon: <FileOutlined />, label: 'file' },
   // === MVP-HIDDEN: 以下页面已从导航中隐藏 ===
   // '/notifications': { icon: <BellOutlined />, label: 'Notifications' },
   // '/messages': { icon: <MessageOutlined />, label: 'Messages' },

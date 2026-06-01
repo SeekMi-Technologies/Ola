@@ -79,6 +79,7 @@ export default function DataTable({ config, extra = [] }) {
     },
   ];
 
+  const dispatch = useDispatch();
   const navigate = useNavigate();
 
   const handleRead = (record) => {
@@ -143,15 +144,12 @@ export default function DataTable({ config, extra = [] }) {
             style={{ cursor: 'pointer', fontSize: '24px' }}
             onClick={(e) => {
               e.stopPropagation();
-              e.preventDefault();
             }}
           />
         </Dropdown>
       ),
     },
   ];
-
-  const dispatch = useDispatch();
 
   const handelDataTableLoad = (pagination) => {
     const options = { page: pagination.current || 1, items: pagination.pageSize || 10 };
@@ -212,6 +210,7 @@ export default function DataTable({ config, extra = [] }) {
         scroll={{ x: true }}
         onRow={(record) => ({
           onClick: () => handleRead(record),
+          style: { cursor: 'pointer' },
         })}
       />
     </>
