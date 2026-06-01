@@ -9,7 +9,7 @@ function mongoConnectOptions() {
   const uri = process.env.DATABASE || '';
   const useTls = uri.startsWith('mongodb+srv') || process.env.MONGO_TLS === 'true';
   return {
-    ...(useTls ? { tls: true, tlsAllowInvalidCertificates: true } : {}),
+    ...(useTls ? { tls: true } : {}),
     serverSelectionTimeoutMS: 30000, // 30 seconds
     socketTimeoutMS: 45000, // 45 seconds
     family: 4, // Force IPv4
