@@ -78,13 +78,10 @@
   font-size: 13px;
   color: #333;
   border-bottom: 1px solid #f5f5f5;
-  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .ant-table-tbody > tr:hover > td {
   background: #fafafa !important;
-  color: #0084ff !important;
-  cursor: pointer;
 }
 
 .ant-typography strong {

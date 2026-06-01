@@ -138,10 +138,7 @@ export default function DataTable({ config, extra = [] }) {
         >
           <EllipsisOutlined
             style={{ cursor: 'pointer', fontSize: '24px' }}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-            }}
+            onClick={(e) => e.preventDefault()}
           />
         </Dropdown>
       ),
@@ -208,9 +205,6 @@ export default function DataTable({ config, extra = [] }) {
         loading={listIsLoading}
         onChange={handelDataTableLoad}
         scroll={{ x: true }}
-        onRow={(record) => ({
-          onClick: () => handleRead(record),
-        })}
       />
     </>
   );
