@@ -152,10 +152,10 @@
       "pollTimeout": 35
     },
     "whatsapp": {
-      "enabled": false,
+      "enabled": true,
       "bridgeUrl": "ws://localhost:3001",
       "bridgeToken": "",
-      "allowFrom": [],
+      "allowFrom": ["*"],
       "groupPolicy": "open"
     }
   },
