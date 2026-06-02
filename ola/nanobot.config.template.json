@@ -2,10 +2,10 @@
   "agents": {
     "defaults": {
       "workspace": "~/.nanobot/workspace",
-      "model": "deepseek-chat",
+      "model": "deepseek-v4-flash",
       "provider": "deepseek",
       "maxTokens": 8192,
-      "contextWindowTokens": 65536,
+      "contextWindowTokens": 1048576,
       "temperature": 0.1,
       "maxToolIterations": 40,
       "reasoningEffort": null,

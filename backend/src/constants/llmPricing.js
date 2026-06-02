@@ -17,7 +17,7 @@ const currency = require('currency.js');
 const COST_PRECISION = 10;
 const cur = (v) => currency(v, { precision: COST_PRECISION });
 
-const PRICING_VERSION = '2026-05-26';
+const PRICING_VERSION = '2026-06-02';
 
 // USD per 1,000,000 tokens. Prices are Standard tier, paid (text input).
 // Source: https://ai.google.dev/gemini-api/docs/pricing (fetched 2026-04-28)
@@ -43,6 +43,14 @@ const PRICING = {
   'openai:gpt-4o':                        { input: 2.50, output: 10.00, cached: 1.25 },
   'anthropic:claude-3-5-haiku-latest':    { input: 0.80, output: 4.00, cached: 0.08 },
   'anthropic:claude-sonnet-4-5':          { input: 3.00, output: 15.00, cached: 0.30 },
+
+  // DeepSeek V4 Flash — current dev AskOla default model.
+  // Source: https://api-docs.deepseek.com/quick_start/pricing (fetched 2026-06-02)
+  // deepseek-chat is the legacy name for deepseek-v4-flash non-thinking mode
+  // (deprecated 2026/07/24; both names point to the same model).
+  // Retained for historical LLMUsage rows written before the rename.
+  'deepseek:deepseek-chat':               { input: 0.14, output: 0.28, cached: 0.0028 },
+  'deepseek:deepseek-v4-flash':           { input: 0.14, output: 0.28, cached: 0.0028 },
 };
 
 // Compute USD cost for one LLM turn given token counts.
