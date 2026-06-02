@@ -267,7 +267,9 @@ if [ -n "$WA_BRIDGE_PID" ] && [ -f "$HOME/.nanobot/wa/bridge.port" ]; then
     if [ -f "$DEFAULT_ADMIN_AUTH" ]; then
       WA_STATUS_NOTE="admin@admin.com auto-reconnect (creds.json present)"
     else
-      WA_STATUS_NOTE="📱 admin@admin.com FIRST scan needed — run: tail -f /tmp/ola-wa-bridge.log"
+      # QR ASCII is ~30 lines tall — default tail -f shows last 10, truncating
+      # the top. Use -n 100 so the full QR + startup lines are visible at once.
+      WA_STATUS_NOTE="📱 admin@admin.com FIRST scan needed — run: tail -n 100 -f /tmp/ola-wa-bridge.log"
     fi
     echo -e "  WA bridge       : ${GREEN}running${NC} (port $BRIDGE_PORT) — $WA_STATUS_NOTE"
   else
