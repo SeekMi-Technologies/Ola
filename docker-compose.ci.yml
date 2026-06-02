@@ -1,0 +1,29 @@
+# CI-only override — adds an ephemeral mongo and waits for it before booting backend/mcp.
+#
+# Layered on top of the prod compose so prod config is never touched:
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
+#
+# backend/mcp pick up DATABASE=mongodb://mongo:27017/ola_ci from the CI-generated
+# backend/.env (env_file), so no DATABASE override is needed here. The conditional-TLS
+# logic in @/utils/dbOptions keeps TLS off for this plain mongodb:// URI.
+services:
+  mongo:
+    image: mongo:7
+    # Ephemeral: data lives in RAM, vanishes on teardown, fast cold start.
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  mcp:
+    depends_on:
+      mongo:
+        condition: service_healthy

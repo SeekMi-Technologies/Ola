@@ -32,6 +32,7 @@ vi.mock('react-redux', async () => {
 });
 
 import useLanguage from '../useLanguage';
+import { DEFAULT_LANG } from '@/redux/lang/reducer';
 
 beforeEach(() => {
   mockLang = 'zh';
@@ -119,7 +120,10 @@ describe('useLanguage — language selection', () => {
   test('null lang from selector → DEFAULT_LANG path → still resolves', () => {
     mockLang = null;
     const { result } = renderHook(() => useLanguage());
-    expect(result.current('hello')).toBe('你好');
+    // Derive from DEFAULT_LANG so this test tracks the configured default
+    // (currently 'en') instead of going stale if the default flips.
+    const expected = DEFAULT_LANG === 'zh' ? '你好' : 'Hello';
+    expect(result.current('hello')).toBe(expected);
   });
 });
 

@@ -1,0 +1,115 @@
+name: Smoke E2E
+
+# Stands up the full Docker stack (backend + mcp + frontend + ephemeral mongo) and runs
+# real curl assertions against the nginx:80 → backend path. Catches infra/routing bugs
+# that only fail under real HTTP traffic and are invisible to jest/vitest — e.g. PR #111,
+# where an nginx proxy_pass truncated /api/login → /api/ (passed unit tests, broke prod).
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+# Cancel an in-flight run when a new commit lands on the same ref.
+concurrency:
+  group: smoke-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: docker compose + curl E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Chain prod compose + CI override for every `docker compose` call in this job.
+      COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
+      # Required by docker-compose.yml's mcp `${MCP_BIND_ADDR:?...}` (loopback for CI).
+      MCP_BIND_ADDR: 127.0.0.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write CI backend/.env (stub — no real secrets)
+        run: |
+          cat > backend/.env <<'EOF'
+          DATABASE=mongodb://mongo:27017/ola_ci
+          JWT_SECRET=ci-test-secret
+          MCP_SERVICE_TOKEN=ci-test-token
+          GEMINI_API_KEY=ci-unused
+          ADMIN_EMAIL=test@test.com
+          ADMIN_PASSWORD=test1234
+          NODE_ENV=production
+          PUBLIC_SERVER_FILE=http://localhost:8888/
+          EOF
+
+      - name: Build + start stack
+        run: docker compose up -d --build
+
+      - name: Wait for backend /health (via nginx)
+        run: |
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/health || true)
+            if [[ "$code" == "200" ]]; then echo "backend healthy after ~$((i*3))s"; exit 0; fi
+            echo "waiting for /health (attempt $i, last code: ${code:-none})"
+            sleep 3
+          done
+          echo "::error::backend /health never returned 200"
+          exit 1
+
+      - name: Seed test admin
+        # Idempotent: exits 0 if test@test.com already exists. Connects to mongo directly.
+        run: docker compose exec -T backend npm run add-admin
+
+      - name: Smoke assertions
+        run: |
+          set -euo pipefail
+          BASE=http://localhost
+
+          # 1. nginx up, backend /health reachable.
+          curl -sfS "$BASE/health" > /dev/null
+          echo "PASS 1: /health reachable"
+
+          # 2. /api forwarding path intact → 401 (not 404). PR #111 tripwire: a truncated
+          #    proxy_pass makes the backend see the wrong URL and return 404 here.
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/setting/listAll")
+          [[ "$CODE" == "401" ]] || { echo "FAIL 2: expected 401 for /api/setting/listAll without cookie, got $CODE"; exit 1; }
+          echo "PASS 2: /api/setting/listAll → 401 without cookie"
+
+          # 3. Full login chain: POST login → "success":true + token cookie in jar.
+          #    Retry to absorb backend↔mongo connection lag right after boot.
+          LOGIN_OK=
+          for i in $(seq 1 10); do
+            LOGIN_RESP=$(curl -s -c /tmp/jar -X POST "$BASE/api/login" \
+              -H 'Content-Type: application/json' \
+              -d '{"email":"test@test.com","password":"test1234"}')
+            if echo "$LOGIN_RESP" | grep -q '"success":true'; then LOGIN_OK=1; break; fi
+            echo "login not ready (attempt $i): $LOGIN_RESP"
+            sleep 3
+          done
+          [[ -n "$LOGIN_OK" ]] || { echo "FAIL 3: login didn't succeed"; exit 1; }
+          grep -q 'token' /tmp/jar || { echo "FAIL 3: no token cookie set"; exit 1; }
+          ADMIN_ID=$(echo "$LOGIN_RESP" | jq -r '.result._id')
+          [[ -n "$ADMIN_ID" && "$ADMIN_ID" != "null" ]] || { echo "FAIL 3: couldn't parse admin _id from login response: $LOGIN_RESP"; exit 1; }
+          echo "PASS 3: login success + token cookie"
+
+          # 4. Cookie auth propagates → authed read-self returns a success envelope.
+          #    Uses /api/admin/read/<id> (not /setting/listAll, which legitimately
+          #    returns "success":false when the Setting collection is empty — CI
+          #    only seeds an admin, not defaults, so listAll's empty-state shape
+          #    is indistinguishable from a real failure envelope).
+          AUTH_RESP=$(curl -s -b /tmp/jar "$BASE/api/admin/read/$ADMIN_ID")
+          echo "$AUTH_RESP" | grep -q '"success":true' || { echo "FAIL 4: cookie auth not propagating: $AUTH_RESP"; exit 1; }
+          echo "PASS 4: cookie auth propagates"
+
+          echo "✅ all smoke assertions passed"
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --no-color --tail=200 || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v || true

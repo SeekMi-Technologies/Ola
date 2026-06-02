@@ -2,8 +2,9 @@ require('dotenv').config({ path: '.env' });
 require('dotenv').config({ path: '.env.local' });
 const { generate: uniqueId } = require('shortid');
 const mongoose = require('mongoose');
+const { mongoConnectOptions } = require('../utils/dbOptions');
 
-mongoose.connect(process.env.DATABASE);
+mongoose.connect(process.env.DATABASE, mongoConnectOptions());
 
 async function addAdmin() {
   try {
