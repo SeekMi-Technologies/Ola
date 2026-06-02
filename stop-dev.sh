@@ -18,7 +18,7 @@ pkill -f "nodemon.*src/mcp/server\.js" 2>/dev/null && echo "  Killed nodemon (mc
 # Clean shared + per-admin portfiles so next start-dev fresh discovers new port.
 # Stale per-admin port files (left over from earlier multi-bridge mode) would
 # otherwise mislead nanobot to connect to a port from a now-dead bridge.
-pkill -f "node.*bridge/dist/index" 2>/dev/null && echo "  Killed WhatsApp bridge" || true
+pkill -f "node dist/index\.js" 2>/dev/null && echo "  Killed WhatsApp bridge" || true
 rm -f "$HOME/.nanobot/wa/bridge.port"
 rm -f "$HOME/.nanobot/wa"/*/port 2>/dev/null || true
 

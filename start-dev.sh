@@ -191,6 +191,13 @@ if [ -d "$NANOBOT_DIR" ]; then
   # 是必须的; 当 #181 H2' event-driven sync 切上线后这步可以删 (届时 nanobot
   # 启动调 CRM /api/internal/wa/enabled-admins 拿 list, 不依赖 fs scan).
   echo -e "${GREEN}[4c/5] Starting WhatsApp bridge — default admin admin@admin.com...${NC}"
+  # Defensive: kill orphan bridge processes from incomplete prior stop-dev. Without
+  # this, multiple bridges share the same per-admin creds.json → WhatsApp replies
+  # status 440 (connectionReplaced) in a 5s reconnect loop. The pattern matches
+  # `node dist/index.js` (bridge process cwd is bridge/, but the command line does
+  # not include "bridge/" — earlier patterns mismatched, accumulating orphans).
+  pkill -f "node dist/index\.js" 2>/dev/null && echo "     Killed orphan bridge(s) from prior session" || true
+  sleep 1
   if [ ! -f "$NANOBOT_DIR/bridge/dist/index.js" ]; then
     echo -n "     Building bridge (first run)..."
     (cd "$NANOBOT_DIR/bridge" && npm install --silent --no-audit --no-fund && npm run build) > /tmp/ola-wa-bridge-build.log 2>&1
