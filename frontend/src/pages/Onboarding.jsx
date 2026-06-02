@@ -127,7 +127,7 @@ export default function Onboarding() {
             <Form.Item style={{ marginTop: 30 }}>
               <div style={{ display: 'flex', gap: '16px' }}>
                 <Button onClick={() => { dispatch(logout()); navigate('/login', { replace: true }); }} size="large" style={{ flex: 1 }}>
-                  {translate('Back')}
+                  {translate('logout')}
                 </Button>
                 <Button
                   type="primary"
@@ -221,7 +221,7 @@ export default function Onboarding() {
     );
   };
 
-  const title = currentStep === 0 ? translate('welcome_to_ola') : translate('almost_there');
+  const title = currentStep === 0 ? 'welcome_to_ola' : 'almost_there';
 
   return <AuthModule authContent={<FormContainer />} AUTH_TITLE={title} />;
 }
