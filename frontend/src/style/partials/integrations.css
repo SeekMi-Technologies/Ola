@@ -13,14 +13,23 @@
   background: #ffffff;
   border: 1px solid #eeeeee;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-  transition: box-shadow 0.32s ease,
+  transition: background-color 0.28s ease,
+              color 0.28s ease,
+              box-shadow 0.32s ease,
               border-color 0.22s ease,
               border-width 0.22s ease;
 }
 
 .whiteBox.integration-card.shadow:hover {
-  border: 1px solid #e0e0e0;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  background-color: #f5f5f5; /* Premium ultra-light gray */
+  border-color: #e8e8e8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+}
+
+.integration-card__name-row span {
+  color: #1f1f1f;
+  transition: color 0.28s ease;
 }
 
 /* connected — thicker, more visible green border */
@@ -71,13 +80,15 @@
               opacity 0.28s ease;
 }
 
+/* 
 .integration-card:hover .integration-card__name-row {
   transform: translateY(-100%);
   opacity: 0;
 }
+*/
 
-/* ---- description: slides up from below on hover ---- */
-
+/* ---- description: slides up from below on hover (commented out as currently not needed) ---- */
+/* 
 .integration-card__description {
   position: absolute;
   inset: 0;
@@ -99,3 +110,4 @@
   transform: translateY(0);
   opacity: 1;
 }
+*/
