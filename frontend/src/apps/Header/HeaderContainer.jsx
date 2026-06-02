@@ -38,6 +38,7 @@ import {
   CreditCardOutlined,
   SettingOutlined,
   UserOutlined,
+  ApiOutlined,
   CheckSquareOutlined,
   HistoryOutlined,
   PlusOutlined,
@@ -47,6 +48,7 @@ const PAGE_MAP = {
   '/': { icon: <DashboardOutlined />, label: 'Dashboard' },
   '/askola': { icon: <SmileOutlined />, label: 'Ask Ola' },
   '/file': { icon: <FileOutlined />, label: 'file' },
+  '/integrations': { icon: <ApiOutlined />, label: 'integrations' },
   // === MVP-HIDDEN: 以下页面已从导航中隐藏 ===
   // '/notifications': { icon: <BellOutlined />, label: 'Notifications' },
   // '/messages': { icon: <MessageOutlined />, label: 'Messages' },
