@@ -198,6 +198,18 @@ if [ -d "$NANOBOT_DIR" ]; then
   # not include "bridge/" — earlier patterns mismatched, accumulating orphans).
   pkill -f "node dist/index\.js" 2>/dev/null && echo "     Killed orphan bridge(s) from prior session" || true
   sleep 1
+
+  # Belt-and-suspenders: wipe ALL admin WA auth state every start. Operators
+  # who ctrl+c instead of running stop-dev.sh leave behind stale auth dirs +
+  # portfiles; this guarantees fresh QR scan every start regardless of how
+  # the previous session ended. Default dev admin auth dir re-created below.
+  # Other test admins (e.g. for cross-tenant scenarios) need to be re-mkdir'd
+  # by hand each session.
+  if [ -d "$HOME/.nanobot/wa" ] && [ "$(ls -A "$HOME/.nanobot/wa" 2>/dev/null)" ]; then
+    rm -rf "$HOME/.nanobot/wa"/*
+    echo "     Wiped previous WA state (all admin auth + portfiles cleared)"
+  fi
+
   if [ ! -f "$NANOBOT_DIR/bridge/dist/index.js" ]; then
     echo -n "     Building bridge (first run)..."
     (cd "$NANOBOT_DIR/bridge" && npm install --silent --no-audit --no-fund && npm run build) > /tmp/ola-wa-bridge-build.log 2>&1

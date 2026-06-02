@@ -15,21 +15,17 @@ pkill -f "nodemon.*src/server\.js" 2>/dev/null && echo "  Killed nodemon (backen
 pkill -f "nodemon.*src/mcp/server\.js" 2>/dev/null && echo "  Killed nodemon (mcp)" || true
 
 # WhatsApp bridge uses OS-assigned port (listen(0)) — kill by process pattern.
-# Clean shared + per-admin portfiles so next start-dev fresh discovers new port.
-# Stale per-admin port files (left over from earlier multi-bridge mode) would
-# otherwise mislead nanobot to connect to a port from a now-dead bridge.
+# Pattern matches `node dist/index.js` — the bridge process cwd is bridge/ but
+# the command line does not include "bridge/" prefix.
 pkill -f "node dist/index\.js" 2>/dev/null && echo "  Killed WhatsApp bridge" || true
-rm -f "$HOME/.nanobot/wa/bridge.port"
-rm -f "$HOME/.nanobot/wa"/*/port 2>/dev/null || true
 
-# Wipe default dev admin (admin@admin.com) WA auth state — every restart starts
-# fresh, requires re-scan. Avoids stale linked-device records on operator phone
-# + reduces multi-dev device conflict risk ("顶号" semantics).
-# Other admin dirs (if any) preserved so dev setups with multiple test admins
-# aren't all nuked.
-if [ -d "$HOME/.nanobot/wa/699245d5c692e668ea7ab155/auth" ]; then
-  rm -rf "$HOME/.nanobot/wa/699245d5c692e668ea7ab155/auth"
-  echo "  Wiped admin@admin.com WA auth (next start-dev = fresh QR scan)"
+# Wipe ALL admin WA auth state. Symmetric with start-dev.sh wipe — whoever
+# fires first (stop-dev OR start-dev) brings the state to fresh. Handles the
+# common case where the operator ctrl+c's instead of running stop-dev.sh:
+# the next start-dev wipes anyway, but stop-dev keeps disk clean when used.
+if [ -d "$HOME/.nanobot/wa" ] && [ "$(ls -A "$HOME/.nanobot/wa" 2>/dev/null)" ]; then
+  rm -rf "$HOME/.nanobot/wa"/*
+  echo "  Wiped all WA admin auth (next start-dev = fresh QR scan)"
 fi
 
 for PORT in 8888 8889 8900 8901 3000; do
