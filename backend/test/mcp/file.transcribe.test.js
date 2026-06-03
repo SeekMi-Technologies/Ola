@@ -6,6 +6,7 @@
  * Mocks only the transcriptionWorker (no actual API calls).
  *
  * Covers:
+ *  0. file.transcribe rejects when no actingAdmin → PERMISSION
  *  1. file.transcribe creates Job for audio file → status: 'processing'
  *  2. file.transcribe rejects non-audio file → UNSUPPORTED_TYPE
  *  3. file.transcribe returns cached transcript when job is done
@@ -13,6 +14,9 @@
  *  5. file.transcribe re-transcribes when previous job failed
  *  6. file.transcribe file not found → NOT_FOUND
  *  7. file.transcribe cross-admin → NOT_FOUND
+ *  8. file.transcribe returns PROCESSING when job is pending
+ *  9. file.transcribe re-transcribes when done but sidecar missing
+ * 10. file.transcribe re-transcribes when transcriptionJobId is stale
  */
 
 const path = require('path');
@@ -222,4 +226,71 @@ test('7. file.transcribe cross-admin → NOT_FOUND', async () => {
 
   expect(res.ok).toBe(false);
   expect(res.code).toBe('NOT_FOUND');
+});
+
+test('8. file.transcribe returns PROCESSING when job is pending', async () => {
+  const { file } = await createFile(adminA, { jobStatus: 'pending' });
+
+  const res = await runWithContext({ actingAdmin: adminA }, () =>
+    file_transcribe.handler({ fileId: file._id.toString() })
+  );
+
+  expect(res.ok).toBe(false);
+  expect(res.code).toBe('PROCESSING');
+  expect(res.message).toMatch(/already in progress/);
+});
+
+test('9. file.transcribe re-transcribes when job is done but sidecar is missing', async () => {
+  const { file } = await createFile(adminA, {
+    jobStatus: 'done',
+    transcriptText: 'A 00:00  cached transcript content',
+  });
+
+  // Delete the sidecar file to simulate corrupted/missing transcript
+  const absoluteSourcePath = path.join(TMP_DIR, file.sourcePath);
+  fs.unlinkSync(absoluteSourcePath + '.txt');
+
+  const res = await runWithContext({ actingAdmin: adminA }, () =>
+    file_transcribe.handler({ fileId: file._id.toString() })
+  );
+
+  expect(res.ok).toBe(true);
+  expect(res.data.status).toBe('processing');
+
+  // A new job should have been created
+  const JobModel = mongoose.model('Job');
+  const jobs = await JobModel.find({ refId: file._id });
+  expect(jobs.length).toBeGreaterThanOrEqual(2);
+});
+
+test('10. file.transcribe re-transcribes when transcriptionJobId is stale (job deleted)', async () => {
+  const { file } = await createFile(adminA, { skipJob: true });
+
+  // Manually set transcriptionJobId to a non-existent ObjectId
+  const staleJobId = new mongoose.Types.ObjectId();
+  const FileModel = mongoose.model('File');
+  await FileModel.findByIdAndUpdate(file._id, { transcriptionJobId: staleJobId });
+
+  const res = await runWithContext({ actingAdmin: adminA }, () =>
+    file_transcribe.handler({ fileId: file._id.toString() })
+  );
+
+  expect(res.ok).toBe(true);
+  expect(res.data.status).toBe('processing');
+  expect(res.data.jobId).toBeTruthy();
+
+  // The new job should be different from the stale ID
+  expect(res.data.jobId).not.toBe(staleJobId.toString());
+});
+
+test('0. file.transcribe rejects when no actingAdmin → PERMISSION', async () => {
+  const { file } = await createFile(adminA, { skipJob: true });
+
+  const res = await runWithContext({ actingAdmin: null }, () =>
+    file_transcribe.handler({ fileId: file._id.toString() })
+  );
+
+  expect(res.ok).toBe(false);
+  expect(res.code).toBe('PERMISSION');
+  expect(res.message).toMatch(/X-Acting-As/);
 });

@@ -13,10 +13,22 @@ const mongoose = require('mongoose');
 const { z } = require('zod');
 const fileController = require('@/controllers/appControllers/fileController');
 const { runController } = require('../../adapters/controllerAdapter');
+const { getCurrentActingAdmin } = require('../../context');
 const { collapseJobStatus } = require('@/utils/collapseJobStatus');
 const runTranscription = require('@/jobs/transcriptionWorker');
 
-const AUDIO_MIME_PREFIXES = ['audio/', 'video/mp4', 'video/3gpp', 'video/webm'];
+// Supported MIME prefixes for transcription input.
+// audio/* covers all audio formats; video entries cover common containers
+// that may contain audio tracks (voice recordings, screen recordings, etc.).
+const AUDIO_MIME_PREFIXES = [
+  'audio/',
+  'video/mp4',
+  'video/3gpp',
+  'video/webm',
+  'video/quicktime',   // .mov
+  'video/x-matroska',  // .mkv
+  'video/mpeg',        // .mpeg
+];
 
 function isAudioLike(mimeType) {
   if (!mimeType) return false;
@@ -34,6 +46,16 @@ const file_transcribe = {
     fileId: z.string().min(1).describe('File._id of the audio/video file to transcribe'),
   },
   handler: async ({ fileId }) => {
+    // 0. Business-scope tool: reject if no acting admin (X-Acting-As required)
+    const actingAdmin = getCurrentActingAdmin();
+    if (!actingAdmin) {
+      return {
+        ok: false,
+        code: 'PERMISSION',
+        message: 'X-Acting-As header required for file.transcribe',
+      };
+    }
+
     // 1. Load file doc (scoped to admin via controllerAdapter)
     const fileRes = await runController(fileController.read, {
       params: { id: fileId },
@@ -82,11 +104,16 @@ const file_transcribe = {
             message: `Transcription is already in progress (jobId=${existingJob._id}). Poll file.transcription_status until done.`,
           };
         }
-        // 'failed' or 'ready' → re-transcribe below
+        // 'failed' (or job doc not found in DB) → re-transcribe below
       }
     }
 
     // 4. Create a new transcription job
+    // NOTE: JobModel.create and FileModel.findByIdAndUpdate are not wrapped in
+    // a MongoDB transaction. If the process crashes between them, an orphaned
+    // Job will exist with no File pointing to it. This is benign: the next
+    // file.transcribe call will create a new Job (re-transcription is idempotent),
+    // and orphaned Jobs are harmless until garbage-collected.
     let job;
     try {
       job = await JobModel.create({
