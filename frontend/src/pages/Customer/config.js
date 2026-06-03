@@ -1,6 +1,8 @@
 export const fields = {
   name: {
     type: 'string',
+    required: true,
+    message: 'Please enter name',
   },
   country: {
     type: 'country',

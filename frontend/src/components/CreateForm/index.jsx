@@ -53,11 +53,11 @@ export default function CreateForm({ config, formElements, withUpload = false })
           borderBottom: '1px solid #f3f4f6', paddingBottom: '12px', alignItems: 'center',
         }}>
           <Button disabled type="dashed" icon={<PlusOutlined />} size="small"
-            style={{ borderRadius: '6px', fontSize: '12px' }}>Add New</Button>
+            style={{ borderRadius: '6px', fontSize: '12px' }}>{translate('add_new')}</Button>
           <Button disabled type="text" icon={<EditOutlined />} size="small"
-            style={{ borderRadius: '6px', fontSize: '12px', background: '#f3f4f6' }}>Edit</Button>
+            style={{ borderRadius: '6px', fontSize: '12px', background: '#f3f4f6' }}>{translate('edit')}</Button>
           <Button disabled type="text" danger icon={<DeleteOutlined />} size="small"
-            style={{ borderRadius: '6px', fontSize: '12px', background: '#fef2f2' }}>Remove</Button>
+            style={{ borderRadius: '6px', fontSize: '12px', background: '#fef2f2' }}>{translate('remove')}</Button>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
             <Button type="primary" htmlType="submit" size="small"
               style={{ borderRadius: '6px', fontSize: '12px', background: '#10b981', borderColor: '#10b981' }}>

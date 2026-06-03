@@ -569,15 +569,19 @@ function FormElement({ field, feedback, setFeedback, isUpdateForm = false, idx =
           }}
         >
           {capitalizeFirstLetter(translate(field.label))}
+          {field.required && (
+            <span style={{ color: '#ff4d4f', marginLeft: '4px' }}>*</span>
+          )}
         </div>
         <div style={{ flexGrow: 1, minWidth: 0, overflow: 'hidden' }}>
           <Form.Item
             name={field.name}
-            noStyle
+            style={{ marginBottom: 0 }}
             rules={[
               {
                 required: field.required || false,
                 type: filedType[field.type] ?? 'any',
+                message: field.message ? translate(field.message) : undefined,
               },
             ]}
             valuePropName={field.type === 'boolean' ? 'checked' : 'value'}

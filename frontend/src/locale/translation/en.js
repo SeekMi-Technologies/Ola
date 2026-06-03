@@ -546,6 +546,7 @@ const lang = {
   'Please select an item': 'Please select an item',
   'Qty': 'Qty',
   'Please enter quantity': 'Please enter quantity',
+  'Please enter name': 'Please enter name',
   'Price (USD)': 'Price (USD)',
   'Please enter price': 'Please enter price',
   'Exp (CNY)': 'Exp (CNY)',
