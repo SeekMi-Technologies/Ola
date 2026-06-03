@@ -138,7 +138,7 @@ function getMockResponse(config) {
         {
           _id: '65a1abc11111111111111111',
           name: 'Nextable Limited',
-          country: 'Hong Kong',
+          country: 'HK',
           address: '香港湾仔轩尼诗道 180 号',
           phone: '+852 2345 6789',
           email: 'contact@nextable.com',
@@ -148,7 +148,7 @@ function getMockResponse(config) {
         {
           _id: '65a2def22222222222222222',
           name: 'Sino Cable Group',
-          country: 'China',
+          country: 'CN',
           address: '上海市浦东新区张江高科技园区',
           phone: '+86 21 6888 8888',
           email: 'info@sinocable.cn',
@@ -158,7 +158,7 @@ function getMockResponse(config) {
         {
           _id: '65a3ghi33333333333333333',
           name: 'International Union of Electronic, Electrical, Salaried, Machine and Furniture Workers (IUE-CWA)',
-          country: 'United States',
+          country: 'US',
           address: '501 3rd Street NW, Washington, DC 20001',
           phone: '+1 202 434 1100',
           email: 'info@iue-cwa.org',
@@ -208,7 +208,7 @@ function getMockResponse(config) {
         result: {
           _id: '65a1abc11111111111111111',
           name: 'Nextable Limited',
-          country: 'Hong Kong',
+          country: 'HK',
           address: '香港湾仔轩尼诗道 180 号',
           phone: '+852 2345 6789',
           email: 'contact@nextable.com',
@@ -224,7 +224,7 @@ function getMockResponse(config) {
         result: {
           _id: '65a2def22222222222222222',
           name: 'Sino Cable Group',
-          country: 'China',
+          country: 'CN',
           address: '上海市浦东新区张江高科技园区',
           phone: '+86 21 6888 8888',
           email: 'info@sinocable.cn',
@@ -240,7 +240,7 @@ function getMockResponse(config) {
         result: {
           _id: '65a3ghi33333333333333333',
           name: 'International Union of Electronic, Electrical, Salaried, Machine and Furniture Workers (IUE-CWA)',
-          country: 'United States',
+          country: 'US',
           address: '501 3rd Street NW, Washington, DC 20001',
           phone: '+1 202 434 1100',
           email: 'info@iue-cwa.org',

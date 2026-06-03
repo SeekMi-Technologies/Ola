@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 
 import dayjs from 'dayjs';
 import { dataForRead } from '@/utils/dataStructure';
+import { countryList } from '@/utils/countryList';
 
 import { useCrudContext } from '@/context/crud';
 import { selectCurrentItem } from '@/redux/crud/selectors';
@@ -31,6 +32,21 @@ export default function ReadItem({ config }) {
         const isDate = props.isDate || false;
         let value = valueByString(currentResult, propsKey);
         value = isDate ? dayjs(value).format(dateFormat) : value;
+
+        if (props.type === 'country' && value) {
+          const selectedCountry = countryList.find(
+            (obj) => obj.value === value || obj.label === value
+          );
+          if (selectedCountry) {
+            value = (
+              <span>
+                {selectedCountry.icon && selectedCountry.icon + ' '}
+                {translate(selectedCountry.label)}
+              </span>
+            );
+          }
+        }
+
         list.push({ propsKey, label: propsTitle, value: value });
       });
     }

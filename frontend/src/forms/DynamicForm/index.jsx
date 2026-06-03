@@ -96,7 +96,10 @@ const AutoWidthCountrySelect = ({ value, onChange, translate, isUpdateForm = fal
     return len;
   };
 
-  const selectedCountry = countryList.find((obj) => obj.value === value);
+  const selectedCountry = countryList.find(
+    (obj) => obj.value === value || obj.label === value
+  );
+  const resolvedValue = selectedCountry ? selectedCountry.value : value;
   const labelText = selectedCountry ? translate(selectedCountry.label) : '';
   const length = getVisualLength(labelText.toString());
 
@@ -120,7 +123,7 @@ const AutoWidthCountrySelect = ({ value, onChange, translate, isUpdateForm = fal
   return (
     <Select
       showSearch
-      value={value}
+      value={resolvedValue}
       onChange={onChange}
       optionFilterProp="children"
       variant={isUpdateForm ? 'borderless' : undefined}

@@ -13,6 +13,7 @@ export const dataForRead = ({ fields, translate }) => {
     columns.push({
       title: field.label ? translate(field.label) : translate(key),
       dataIndex: field.dataIndex ? field.dataIndex.join('.') : key,
+      type: field.type,
       isDate: field.type === 'date',
     });
   });
@@ -177,7 +178,14 @@ export function dataForTable({ fields, translate, moneyFormatter, dateFormat }) 
         title: field.label ? translate(field.label) : translate(key),
         dataIndex: keyIndex,
         render: (_, record) => {
-          const selectedCountry = countryList.find((obj) => obj.value === record[key]);
+          const rawValue = record[key];
+          const selectedCountry = countryList.find(
+            (obj) => obj.value === rawValue || obj.label === rawValue
+          );
+
+          if (!selectedCountry) {
+            return rawValue ? <Tag bordered={false}>{rawValue}</Tag> : '-';
+          }
 
           return (
             <Tag bordered={false} color={field.color || undefined}>
@@ -192,6 +200,12 @@ export function dataForTable({ fields, translate, moneyFormatter, dateFormat }) 
     const defaultComponent = {
       title: field.label ? translate(field.label) : translate(key),
       dataIndex: keyIndex,
+      ellipsis: true,
+      onCell: () => ({
+        style: {
+          maxWidth: key === 'name' ? '220px' : key === 'address' ? '250px' : '180px',
+        },
+      }),
     };
 
     const type = field.type;
