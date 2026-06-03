@@ -48,10 +48,15 @@ export default function CreateForm({ config, formElements, withUpload = false })
     <Loading isLoading={isLoading}>
       <Form form={form} layout="vertical" onFinish={onSubmit}>
         {formElements}
-        <Form.Item>
-          <Button type="primary" htmlType="submit">
-            {translate('Submit')}
-          </Button>
+        <Form.Item style={{ marginBottom: 0 }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button type="primary" htmlType="submit">
+              {translate('Submit')}
+            </Button>
+            <Button onClick={() => collapsedBox.open()}>
+              {translate('Cancel')}
+            </Button>
+          </div>
         </Form.Item>
       </Form>
     </Loading>

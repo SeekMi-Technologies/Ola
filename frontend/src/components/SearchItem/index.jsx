@@ -10,8 +10,10 @@ import { crud } from '@/redux/crud/actions';
 
 import { useCrudContext } from '@/context/crud';
 import { selectSearchedItems } from '@/redux/crud/selectors';
+import useLanguage from '@/locale/useLanguage';
 
 function SearchItemComponent({ config, onRerender }) {
+  const translate = useLanguage();
   let { entity, searchConfig } = config;
 
   const { displayLabels, searchFields, outputValue = '_id' } = searchConfig;
@@ -95,7 +97,8 @@ function SearchItemComponent({ config, onRerender }) {
       loading={isLoading}
       showSearch
       allowClear
-      placeholder={<SearchOutlined style={{ float: 'right', padding: '8px 0' }} />}
+      placeholder={translate('search')}
+      suffixIcon={<SearchOutlined />}
       defaultActiveFirstOption={false}
       filterOption={false}
       notFoundContent={searching ? '... Searching' : <Empty />}

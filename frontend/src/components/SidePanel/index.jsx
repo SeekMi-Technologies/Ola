@@ -1,62 +1,72 @@
 import { useState, useEffect } from 'react';
 import { useCrudContext } from '@/context/crud';
-import { useAppContext } from '@/context/appContext';
-import { Grid, Layout, Drawer } from 'antd';
-import { MenuOutlined } from '@ant-design/icons';
+import { Drawer } from 'antd';
 import CollapseBox from '../CollapseBox';
-
-const { useBreakpoint } = Grid;
-const { Sider } = Layout;
+import { useSelector } from 'react-redux';
+import { selectCurrentItem } from '@/redux/crud/selectors';
 
 export default function SidePanel({ config, topContent, bottomContent, fixHeaderPanel }) {
-  const screens = useBreakpoint();
-
-  const { ADD_NEW_ENTITY } = config;
+  const { ADD_NEW_ENTITY, deleteModalLabels } = config;
   const { state, crudContextAction } = useCrudContext();
   const { isPanelClose, isBoxCollapsed } = state;
-  const { panel, collapsedBox } = crudContextAction;
-  const [isSidePanelClose, setSidePanel] = useState(isPanelClose);
-  const [leftSider, setLeftSider] = useState('-1px');
+  const { panel } = crudContextAction;
   const [opacitySider, setOpacitySider] = useState(0);
   const [paddingTopSider, setPaddingTopSider] = useState('20px');
 
-  // const { state: stateApp, appContextAction } = useAppContext();
-  // const { isNavMenuClose } = stateApp;
-  // const { navMenu } = appContextAction;
+  const { result: currentItem } = useSelector(selectCurrentItem);
+  const [title, setTitle] = useState(config.PANEL_TITLE);
 
   useEffect(() => {
-    let timer = [];
+    if (!isBoxCollapsed) {
+      setTitle(ADD_NEW_ENTITY);
+    } else if (currentItem) {
+      const currentlabels = deleteModalLabels.map((x) => currentItem[x]).join(' ');
+      setTitle(currentlabels);
+    } else {
+      setTitle(config.PANEL_TITLE);
+    }
+  }, [currentItem, isBoxCollapsed, config, ADD_NEW_ENTITY, deleteModalLabels]);
+
+  useEffect(() => {
+    let timer;
     if (isPanelClose) {
       setOpacitySider(0);
       setPaddingTopSider('20px');
-
-      timer = setTimeout(() => {
-        setLeftSider('-1px');
-        setSidePanel(isPanelClose);
-      }, 200);
     } else {
-      setSidePanel(isPanelClose);
-      setLeftSider(0);
       timer = setTimeout(() => {
         setOpacitySider(1);
         setPaddingTopSider(0);
       }, 200);
     }
 
-    return () => clearTimeout(timer);
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [isPanelClose]);
 
   const collapsePanel = () => {
     panel.collapse();
   };
 
-  const collapsePanelBox = () => {
-    collapsedBox.collapse();
-  };
+  const drawerTitle = (
+    <div
+      style={{
+        maxWidth: '320px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        fontWeight: 600,
+        fontSize: '16px',
+      }}
+      title={title}
+    >
+      {title}
+    </div>
+  );
 
   return (
     <Drawer
-      title={config.PANEL_TITLE}
+      title={drawerTitle}
       placement="right"
       onClose={collapsePanel}
       open={!isPanelClose}
@@ -71,9 +81,7 @@ export default function SidePanel({ config, topContent, bottomContent, fixHeader
       >
         {fixHeaderPanel}
         <CollapseBox
-          buttonTitle={ADD_NEW_ENTITY}
           isCollapsed={isBoxCollapsed}
-          onCollapse={collapsePanelBox}
           topContent={topContent}
           bottomContent={bottomContent}
         ></CollapseBox>

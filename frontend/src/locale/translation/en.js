@@ -842,6 +842,16 @@ const lang = {
   whatsapp_step_2: 'Tap "Settings", then select "Linked Devices"',
   whatsapp_step_3: 'Tap "Link a new device"',
   whatsapp_step_4: 'Point your phone at this screen to scan the QR code',
+  add_note: 'Add note',
+
+  note_placeholder: 'Write a note about this customer...',
+  note_submit: 'Add',
+  note_submitting: 'Adding...',
+  note_empty: 'No notes yet',
+  note_load_error: 'Cannot load notes',
+  note_source_manual: 'Manual',
+  note_source_agent: 'Agent',
+  note_source_system: 'System',
 };
 
 export default lang;

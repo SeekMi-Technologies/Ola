@@ -11,7 +11,7 @@ export const dataForRead = ({ fields, translate }) => {
   Object.keys(fields).forEach((key) => {
     let field = fields[key];
     columns.push({
-      title: field.label ? field.label : key,
+      title: field.label ? translate(field.label) : translate(key),
       dataIndex: field.dataIndex ? field.dataIndex.join('.') : key,
       isDate: field.type === 'date',
     });
@@ -19,6 +19,7 @@ export const dataForRead = ({ fields, translate }) => {
 
   return columns;
 };
+
 
 export function dataForTable({ fields, translate, moneyFormatter, dateFormat }) {
   let columns = [];

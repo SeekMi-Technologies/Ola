@@ -1,6 +1,6 @@
-import { useLayoutEffect, useEffect, useState } from 'react';
+import { useLayoutEffect } from 'react';
 import { Row, Col, Button } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, CloseOutlined } from '@ant-design/icons';
 
 import CreateForm from '@/components/CreateForm';
 import UpdateForm from '@/components/UpdateForm';
@@ -18,24 +18,14 @@ import { useCrudContext } from '@/context/crud';
 
 import { CrudLayout } from '@/layout';
 
-function SidePanelTopContent({ config, formElements, withUpload }) {
+function SidePanelTopContent({ config, formElements, withUpload, extraReadContent }) {
   const translate = useLanguage();
   const { crudContextAction, state } = useCrudContext();
-  const { deleteModalLabels } = config;
-  const { modal, editBox } = crudContextAction;
+  const { modal, editBox, collapsedBox } = crudContextAction;
 
   const { isReadBoxOpen, isEditBoxOpen } = state;
   const { result: currentItem } = useSelector(selectCurrentItem);
   const dispatch = useDispatch();
-
-  const [labels, setLabels] = useState('');
-  useEffect(() => {
-    if (currentItem) {
-      const currentlabels = deleteModalLabels.map((x) => currentItem[x]).join(' ');
-
-      setLabels(currentlabels);
-    }
-  }, [currentItem]);
 
   const removeItem = () => {
     dispatch(crud.currentAction({ actionType: 'delete', data: currentItem }));
@@ -45,68 +35,92 @@ function SidePanelTopContent({ config, formElements, withUpload }) {
     dispatch(crud.currentAction({ actionType: 'update', data: currentItem }));
     editBox.open();
   };
+  const addNewItem = () => {
+    collapsedBox.close(); // Open Create form
+  };
 
   const show = isReadBoxOpen || isEditBoxOpen ? { opacity: 1 } : { opacity: 0 };
   return (
     <>
-      <Row style={show} gutter={(24, 24)}>
-        <Col span={10}>
-          <p style={{ marginBottom: '10px' }}>{labels}</p>
-        </Col>
-        <Col span={14}>
-          <Button
-            onClick={removeItem}
-            type="text"
-            icon={<DeleteOutlined />}
-            size="small"
-            style={{ float: 'right', marginLeft: '5px', marginTop: '10px' }}
-          >
-            {translate('remove')}
-          </Button>
-          <Button
-            onClick={editItem}
-            type="text"
-            icon={<EditOutlined />}
-            size="small"
-            style={{ float: 'right', marginLeft: '0px', marginTop: '10px' }}
-          >
-            {translate('edit')}
-          </Button>
-        </Col>
-
-        <Col span={24}>
-          <div className="line"></div>
-        </Col>
-        <div className="space10"></div>
-      </Row>
+      <div
+        style={{
+          ...show,
+          display: 'flex',
+          justifyContent: 'flex-start',
+          alignItems: 'center',
+          gap: '8px',
+          marginBottom: '16px',
+          borderBottom: '1px solid #f3f4f6',
+          paddingBottom: '12px',
+        }}
+      >
+        <Button
+          onClick={addNewItem}
+          type="dashed"
+          icon={<PlusOutlined />}
+          size="small"
+          style={{ borderRadius: '6px', fontSize: '12px' }}
+        >
+          {translate('add_new')}
+        </Button>
+        <Button
+          onClick={editItem}
+          type="text"
+          icon={<EditOutlined />}
+          size="small"
+          style={{ borderRadius: '6px', fontSize: '12px', background: '#f3f4f6' }}
+        >
+          {translate('edit')}
+        </Button>
+        <Button
+          onClick={removeItem}
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          size="small"
+          style={{ borderRadius: '6px', fontSize: '12px', background: '#fef2f2' }}
+        >
+          {translate('remove')}
+        </Button>
+      </div>
       <ReadItem config={config} />
+      {isReadBoxOpen && extraReadContent}
       <UpdateForm config={config} formElements={formElements} withUpload={withUpload} />
     </>
   );
 }
 
 function FixHeaderPanel({ config }) {
-  const { crudContextAction } = useCrudContext();
-
+  const { crudContextAction, state } = useCrudContext();
+  const { isBoxCollapsed } = state;
   const { collapsedBox } = crudContextAction;
 
-  const addNewItem = () => {
-    collapsedBox.close();
+  const handleCancelCreate = () => {
+    collapsedBox.open(); // Return to read mode
   };
 
   return (
-    <Row gutter={8}>
-      <Col className="gutter-row" span={21}>
+    <Row gutter={8} style={{ marginBottom: '16px' }}>
+      <Col className="gutter-row" span={isBoxCollapsed ? 24 : 20}>
         <SearchItem config={config} />
       </Col>
-      <Col className="gutter-row" span={3}>
-        <Button onClick={addNewItem} block={true} icon={<PlusOutlined />}></Button>
-      </Col>
+      {!isBoxCollapsed && (
+        <Col className="gutter-row" span={4}>
+          <Button
+            onClick={handleCancelCreate}
+            block={true}
+            type="primary"
+            danger
+            icon={<CloseOutlined />}
+            style={{ borderRadius: '6px' }}
+          />
+        </Col>
+      )}
     </Row>
   );
 }
 
-function CrudModule({ config, createForm, updateForm, withUpload = false }) {
+function CrudModule({ config, createForm, updateForm, withUpload = false, extraReadContent }) {
   const dispatch = useDispatch();
 
   useLayoutEffect(() => {
@@ -121,7 +135,12 @@ function CrudModule({ config, createForm, updateForm, withUpload = false }) {
         <CreateForm config={config} formElements={createForm} withUpload={withUpload} />
       }
       sidePanelTopContent={
-        <SidePanelTopContent config={config} formElements={updateForm} withUpload={withUpload} />
+        <SidePanelTopContent
+          config={config}
+          formElements={updateForm}
+          withUpload={withUpload}
+          extraReadContent={extraReadContent}
+        />
       }
     >
       <DataTable config={config} />

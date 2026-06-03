@@ -1,6 +1,7 @@
 import CrudModule from '@/modules/CrudModule/CrudModule';
 import DynamicForm from '@/forms/DynamicForm';
 import { fields } from './config';
+import EntityTrail from '@/components/EntityTrail';
 
 import useLanguage from '@/locale/useLanguage';
 
@@ -34,6 +35,7 @@ export default function Customer() {
       createForm={<DynamicForm fields={fields} />}
       updateForm={<DynamicForm fields={fields} />}
       config={config}
+      extraReadContent={<EntityTrail entityType="Client" />}
     />
   );
 }

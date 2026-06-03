@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Row, Col } from 'antd';
 import { useSelector } from 'react-redux';
 
 import dayjs from 'dayjs';
@@ -22,36 +21,80 @@ export default function ReadItem({ config }) {
   const [listState, setListState] = useState([]);
 
   if (fields) readColumns = [...dataForRead({ fields: fields, translate: translate })];
+
   useEffect(() => {
     const list = [];
-    readColumns.map((props) => {
-      const propsKey = props.dataIndex;
-      const propsTitle = props.title;
-      const isDate = props.isDate || false;
-      let value = valueByString(currentResult, propsKey);
-      value = isDate ? dayjs(value).format(dateFormat) : value;
-      list.push({ propsKey, label: propsTitle, value: value });
-    });
+    if (readColumns && currentResult) {
+      readColumns.forEach((props) => {
+        const propsKey = props.dataIndex;
+        const propsTitle = props.title;
+        const isDate = props.isDate || false;
+        let value = valueByString(currentResult, propsKey);
+        value = isDate ? dayjs(value).format(dateFormat) : value;
+        list.push({ propsKey, label: propsTitle, value: value });
+      });
+    }
     setListState(list);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentResult]);
 
   const show = isReadBoxOpen ? { display: 'block', opacity: 1 } : { display: 'none', opacity: 0 };
 
-  const itemsList = listState.map((item) => {
+  const capitalizeFirstLetter = (str) => {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  };
+
+  const itemsList = listState.map((item, idx) => {
+    const isLast = idx === listState.length - 1;
     return (
-      <Row key={item.propsKey} gutter={12}>
-        <Col className="gutter-row" span={8}>
-          <p>{item.label}</p>
-        </Col>
-        <Col className="gutter-row" span={2}>
-          <p> : </p>
-        </Col>
-        <Col className="gutter-row" span={14}>
-          <p>{item.value}</p>
-        </Col>
-      </Row>
+      <div
+        key={item.propsKey}
+        style={{
+          display: 'flex',
+          padding: '10px 0',
+          fontSize: '13.5px',
+          alignItems: 'baseline',
+          lineHeight: '1.5',
+          borderBottom: isLast ? 'none' : '1px solid #f3f4f6',
+        }}
+      >
+        <div
+          style={{
+            width: '100px',
+            color: '#6b7280',
+            flexShrink: 0,
+            fontWeight: 400,
+          }}
+        >
+          {capitalizeFirstLetter(item.label)}
+        </div>
+        <div
+          style={{
+            color: '#1f2937',
+            fontWeight: 500,
+            wordBreak: 'break-word',
+          }}
+        >
+          {item.value || '-'}
+        </div>
+      </div>
     );
   });
 
-  return <div style={show}>{itemsList}</div>;
+  return (
+    <div
+      style={{
+        ...show,
+        background: '#f9fafb',
+        border: '1px solid #f3f4f6',
+        borderRadius: '12px',
+        padding: '4px 16px',
+        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
+        marginBottom: '24px',
+      }}
+    >
+      {itemsList}
+    </div>
+  );
 }

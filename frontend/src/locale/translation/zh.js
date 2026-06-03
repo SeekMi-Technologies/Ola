@@ -842,6 +842,16 @@ const lang = {
   whatsapp_step_2: '点击「设置」，然后选择「已关联的设备」',
   whatsapp_step_3: '点击「关联新设备」',
   whatsapp_step_4: '用手机对准本屏幕扫描二维码',
+  add_note: '添加备注',
+
+  note_placeholder: '写一条关于这个客户的备注...',
+  note_submit: '添加',
+  note_submitting: '添加中...',
+  note_empty: '暂无备注',
+  note_load_error: '无权访问或不存在',
+  note_source_manual: '手动',
+  note_source_agent: '智能体',
+  note_source_system: '系统',
 };
 
 export default lang;

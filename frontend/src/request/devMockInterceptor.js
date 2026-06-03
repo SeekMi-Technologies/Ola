@@ -46,6 +46,46 @@ function getMockResponse(config) {
 
   // --- list / listAll → empty paginated list ---
   if (url.includes('/list')) {
+    if (url.includes('client')) {
+      const mockClients = [
+        {
+          _id: '65a1abc11111111111111111',
+          name: 'Nextable Limited',
+          country: 'Hong Kong',
+          address: '香港湾仔轩尼诗道 180 号',
+          phone: '+852 2345 6789',
+          email: 'contact@nextable.com',
+          removed: false,
+          enabled: true,
+        },
+        {
+          _id: '65a2def22222222222222222',
+          name: 'Sino Cable Group',
+          country: 'China',
+          address: '上海市浦东新区张江高科技园区',
+          phone: '+86 21 6888 8888',
+          email: 'info@sinocable.cn',
+          removed: false,
+          enabled: true,
+        },
+        {
+          _id: '65a3ghi33333333333333333',
+          name: 'International Union of Electronic, Electrical, Salaried, Machine and Furniture Workers (IUE-CWA)',
+          country: 'United States',
+          address: '501 3rd Street NW, Washington, DC 20001',
+          phone: '+1 202 434 1100',
+          email: 'info@iue-cwa.org',
+          removed: false,
+          enabled: true,
+        },
+      ];
+      return {
+        success: true,
+        result: mockClients,
+        pagination: { page: 1, pages: 1, count: 3 },
+        message: '[DEV MOCK] customer list',
+      };
+    }
     return {
       success: true,
       result: [],
@@ -75,6 +115,54 @@ function getMockResponse(config) {
 
   // --- read → empty object ---
   if (url.includes('/read/')) {
+    if (url.includes('65a1abc11111111111111111')) {
+      return {
+        success: true,
+        result: {
+          _id: '65a1abc11111111111111111',
+          name: 'Nextable Limited',
+          country: 'Hong Kong',
+          address: '香港湾仔轩尼诗道 180 号',
+          phone: '+852 2345 6789',
+          email: 'contact@nextable.com',
+          removed: false,
+          enabled: true,
+        },
+        message: '[DEV MOCK] mock read client 1',
+      };
+    }
+    if (url.includes('65a2def22222222222222222')) {
+      return {
+        success: true,
+        result: {
+          _id: '65a2def22222222222222222',
+          name: 'Sino Cable Group',
+          country: 'China',
+          address: '上海市浦东新区张江高科技园区',
+          phone: '+86 21 6888 8888',
+          email: 'info@sinocable.cn',
+          removed: false,
+          enabled: true,
+        },
+        message: '[DEV MOCK] mock read client 2',
+      };
+    }
+    if (url.includes('65a3ghi33333333333333333')) {
+      return {
+        success: true,
+        result: {
+          _id: '65a3ghi33333333333333333',
+          name: 'International Union of Electronic, Electrical, Salaried, Machine and Furniture Workers (IUE-CWA)',
+          country: 'United States',
+          address: '501 3rd Street NW, Washington, DC 20001',
+          phone: '+1 202 434 1100',
+          email: 'info@iue-cwa.org',
+          removed: false,
+          enabled: true,
+        },
+        message: '[DEV MOCK] mock read client 3',
+      };
+    }
     return {
       success: true,
       result: { _id: 'mock-id', removed: false, enabled: true },
