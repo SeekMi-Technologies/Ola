@@ -26,13 +26,10 @@ const HEADER_INLINE_STYLE = {
 const AUTH_INLINE_STYLE = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: 6,
-  padding: '4px 12px',
-  border: '1px solid #d9d9d9',
-  borderRadius: 6,
+  padding: '4px',
+  border: 'none',
   background: 'transparent',
   cursor: 'pointer',
-  fontSize: 13,
   color: '#8c8c8c',
 };
 
@@ -112,16 +109,9 @@ export default function LanguageToggle({ variant = 'header' }) {
       aria-label={tooltipText}
       style={style}
     >
-      {variant === 'auth' ? (
-        <>
-          <TranslationOutlined />
-          <span>{tooltipText}</span>
-        </>
-      ) : (
-        <Tooltip title={tooltipText} placement="bottom">
-          <TranslationOutlined style={variant === 'header' ? { fontSize: 18, color: '#8c8c8c' } : undefined} />
-        </Tooltip>
-      )}
+      <Tooltip title={tooltipText} placement="bottom">
+        <TranslationOutlined style={{ fontSize: variant === 'header' ? 18 : 16, color: '#8c8c8c' }} />
+      </Tooltip>
     </button>
   );
 }
