@@ -134,21 +134,9 @@ function FixHeaderPanel({ config }) {
 
   return (
     <Row gutter={8} style={{ marginBottom: '16px' }}>
-      <Col className="gutter-row" span={isBoxCollapsed ? 24 : 20}>
+      <Col className="gutter-row" span={24}>
         <SearchItem config={config} />
       </Col>
-      {!isBoxCollapsed && (
-        <Col className="gutter-row" span={4}>
-          <Button
-            onClick={handleCancelCreate}
-            block={true}
-            type="primary"
-            danger
-            icon={<CloseOutlined />}
-            style={{ borderRadius: '6px' }}
-          />
-        </Col>
-      )}
     </Row>
   );
 }

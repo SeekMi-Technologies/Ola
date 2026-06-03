@@ -8,6 +8,7 @@ import { selectCreatedItem } from '@/redux/crud/selectors';
 import useLanguage from '@/locale/useLanguage';
 
 import { Button, Form } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import Loading from '@/components/Loading';
 
 export default function CreateForm({ config, formElements, withUpload = false }) {
@@ -47,17 +48,37 @@ export default function CreateForm({ config, formElements, withUpload = false })
   return (
     <Loading isLoading={isLoading}>
       <Form form={form} layout="vertical" onFinish={onSubmit}>
-        {formElements}
-        <Form.Item style={{ marginBottom: 0 }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <Button type="primary" htmlType="submit">
+        <div style={{
+          display: 'flex', gap: '8px', marginBottom: '16px',
+          borderBottom: '1px solid #f3f4f6', paddingBottom: '12px', alignItems: 'center',
+        }}>
+          <Button disabled type="dashed" icon={<PlusOutlined />} size="small"
+            style={{ borderRadius: '6px', fontSize: '12px' }}>Add New</Button>
+          <Button disabled type="text" icon={<EditOutlined />} size="small"
+            style={{ borderRadius: '6px', fontSize: '12px', background: '#f3f4f6' }}>Edit</Button>
+          <Button disabled type="text" danger icon={<DeleteOutlined />} size="small"
+            style={{ borderRadius: '6px', fontSize: '12px', background: '#fef2f2' }}>Remove</Button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+            <Button type="primary" htmlType="submit" size="small"
+              style={{ borderRadius: '6px', fontSize: '12px', background: '#10b981', borderColor: '#10b981' }}>
               {translate('Submit')}
             </Button>
-            <Button onClick={() => collapsedBox.open()}>
+            <Button size="small" style={{ borderRadius: '6px', fontSize: '12px' }}
+              onClick={() => collapsedBox.open()}>
               {translate('Cancel')}
             </Button>
           </div>
-        </Form.Item>
+        </div>
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #f3f4f6',
+          borderRadius: '12px',
+          padding: '4px 16px',
+          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
+          marginBottom: '24px',
+        }}>
+          {formElements}
+        </div>
       </Form>
     </Loading>
   );

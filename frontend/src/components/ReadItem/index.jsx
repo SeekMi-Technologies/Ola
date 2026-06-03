@@ -39,7 +39,7 @@ export default function ReadItem({ config }) {
           );
           if (selectedCountry) {
             value = (
-              <span>
+              <span style={{ fontSize: '13.5px', fontWeight: 500 }}>
                 {selectedCountry.icon && selectedCountry.icon + ' '}
                 {translate(selectedCountry.label)}
               </span>
