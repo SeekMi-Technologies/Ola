@@ -6,14 +6,11 @@ import { crud } from '@/redux/crud/actions';
 import { useCrudContext } from '@/context/crud';
 import { selectUpdatedItem } from '@/redux/crud/selectors';
 
-import useLanguage from '@/locale/useLanguage';
-
-import { Button, Form } from 'antd';
+import { Form } from 'antd';
 import Loading from '@/components/Loading';
 
 export default function UpdateForm({ config, formElements, withUpload = false }) {
   let { entity } = config;
-  const translate = useLanguage();
   const dispatch = useDispatch();
   const { current, isLoading, isSuccess } = useSelector(selectUpdatedItem);
 
@@ -23,9 +20,7 @@ export default function UpdateForm({ config, formElements, withUpload = false })
 
   const { panel, collapsedBox, readBox } = crudContextAction;
 
-  const showCurrentRecord = () => {
-    readBox.open();
-  };
+
 
   /////
   const [form] = Form.useForm();
@@ -97,26 +92,21 @@ export default function UpdateForm({ config, formElements, withUpload = false })
   return (
     <div style={show}>
       <Loading isLoading={isLoading}>
-        <Form form={form} layout="vertical" onFinish={onSubmit}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={onSubmit}
+          style={{
+            background: '#f9fafb',
+            border: '1px solid #f3f4f6',
+            borderRadius: '12px',
+            padding: '16px',
+            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
+            marginBottom: '24px',
+          }}
+        >
           {formElements}
-          <Form.Item
-            style={{
-              display: 'inline-block',
-              paddingRight: '5px',
-            }}
-          >
-            <Button type="primary" htmlType="submit">
-              {translate('Save')}
-            </Button>
-          </Form.Item>
-          <Form.Item
-            style={{
-              display: 'inline-block',
-              paddingLeft: '5px',
-            }}
-          >
-            <Button onClick={showCurrentRecord}>{translate('Cancel')}</Button>
-          </Form.Item>
+          <button type="submit" id="update-form-submit-btn" style={{ display: 'none' }} />
         </Form>
       </Loading>
     </div>

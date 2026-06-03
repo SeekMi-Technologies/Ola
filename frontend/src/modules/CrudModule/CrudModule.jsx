@@ -21,7 +21,7 @@ import { CrudLayout } from '@/layout';
 function SidePanelTopContent({ config, formElements, withUpload, extraReadContent }) {
   const translate = useLanguage();
   const { crudContextAction, state } = useCrudContext();
-  const { modal, editBox, collapsedBox } = crudContextAction;
+  const { modal, editBox, collapsedBox, readBox } = crudContextAction;
 
   const { isReadBoxOpen, isEditBoxOpen } = state;
   const { result: currentItem } = useSelector(selectCurrentItem);
@@ -56,6 +56,7 @@ function SidePanelTopContent({ config, formElements, withUpload, extraReadConten
       >
         <Button
           onClick={addNewItem}
+          disabled={isEditBoxOpen}
           type="dashed"
           icon={<PlusOutlined />}
           size="small"
@@ -65,6 +66,7 @@ function SidePanelTopContent({ config, formElements, withUpload, extraReadConten
         </Button>
         <Button
           onClick={editItem}
+          disabled={isEditBoxOpen}
           type="text"
           icon={<EditOutlined />}
           size="small"
@@ -74,6 +76,7 @@ function SidePanelTopContent({ config, formElements, withUpload, extraReadConten
         </Button>
         <Button
           onClick={removeItem}
+          disabled={isEditBoxOpen}
           type="text"
           danger
           icon={<DeleteOutlined />}
@@ -82,9 +85,39 @@ function SidePanelTopContent({ config, formElements, withUpload, extraReadConten
         >
           {translate('remove')}
         </Button>
+
+        {isEditBoxOpen && (
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+            <Button
+              onClick={() => {
+                document.getElementById('update-form-submit-btn')?.click();
+              }}
+              type="primary"
+              size="small"
+              style={{
+                borderRadius: '6px',
+                fontSize: '12px',
+                background: '#10b981',
+                borderColor: '#10b981',
+              }}
+            >
+              {translate('Save')}
+            </Button>
+            <Button
+              onClick={() => {
+                dispatch(crud.resetAction({ actionType: 'update' }));
+                readBox.open();
+              }}
+              size="small"
+              style={{ borderRadius: '6px', fontSize: '12px' }}
+            >
+              {translate('Cancel')}
+            </Button>
+          </div>
+        )}
       </div>
       <ReadItem config={config} />
-      {isReadBoxOpen && extraReadContent}
+      {(isReadBoxOpen || isEditBoxOpen) && extraReadContent}
       <UpdateForm config={config} formElements={formElements} withUpload={withUpload} />
     </>
   );
