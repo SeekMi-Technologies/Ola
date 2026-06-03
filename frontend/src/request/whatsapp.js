@@ -1,8 +1,8 @@
-import axios from 'axios';
+import request from '@/request/request';
 
-// Reuses the global axios instance configured in request/request.js (baseURL
-// ends with /api/, withCredentials). Raw calls — the caller maps success/error
-// to localized UI so it can distinguish 503 (gateway) from other failures.
-export const waLogin = () => axios.post('whatsapp/login').then((res) => res.data);
-export const waStatus = () => axios.get('whatsapp/status').then((res) => res.data);
-export const waLogout = () => axios.delete('whatsapp').then((res) => res.data);
+// Goes through the src/request/ layer (request.raw = shared axios, no toast
+// handlers) so the caller can map HTTP status to localized UI — 503 (gateway)
+// vs other failures.
+export const waLogin = () => request.raw.post('whatsapp/login');
+export const waStatus = () => request.raw.get('whatsapp/status');
+export const waLogout = () => request.raw.delete('whatsapp');

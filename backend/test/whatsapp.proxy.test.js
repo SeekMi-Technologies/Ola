@@ -181,3 +181,14 @@ test('7. bridge non-2xx → 502', async () => {
   expect(res.status).toBe(502);
   expect(res.body.message).toBe('WhatsApp bridge error');
 });
+
+test('8. bridge 2xx with non-JSON body → 502 (not a silent success)', async () => {
+  bridgeRespond = (_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' }).end('<html>proxy error</html>');
+  };
+  const res = await request(app).post('/api/whatsapp/login');
+  expect(res.status).toBe(502);
+  expect(res.body.message).toBe('WhatsApp bridge error');
+  // and no Integration row was written for a non-success
+  expect(await Integration.countDocuments({ createdBy: ADMIN_ID })).toBe(0);
+});

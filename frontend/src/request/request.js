@@ -310,5 +310,15 @@ const request = {
       return errorHandler(error);
     }
   },
+
+  // Raw passthrough for endpoints that own their success/error UI (e.g. WhatsApp
+  // connect needs the raw HTTP status to tell 503 apart from other failures).
+  // Same configured axios instance as the rest of this module — deliberately
+  // skips success/errorHandler so the caller sees the untouched response/error.
+  raw: {
+    post: (url, data) => axios.post(url, data).then((res) => res.data),
+    get: (url) => axios.get(url).then((res) => res.data),
+    delete: (url) => axios.delete(url).then((res) => res.data),
+  },
 };
 export default request;

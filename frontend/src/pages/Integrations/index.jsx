@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Button, Input, Switch, Row, Col, message, Modal, QRCode, Spin } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { PageHeader } from '@ant-design/pro-layout';
@@ -61,7 +61,10 @@ export default function IntegrationsPage() {
     }
   };
 
-  const isItemConnected = (item) => item.id === 'whatsapp' && waStatusValue === 'connected';
+  const isItemConnected = useCallback(
+    (item) => item.id === 'whatsapp' && waStatusValue === 'connected',
+    [waStatusValue]
+  );
 
   // Map an error to the right localized toast (503 = gateway down).
   const toastError = (err) =>
@@ -157,8 +160,9 @@ export default function IntegrationsPage() {
         const res = await waStatus();
         setWaStatusValue(res.result?.status || 'disconnected');
         setWaQr(res.result?.qr || null);
-      } catch {
-        // Silent on initial load — don't error-toast just for opening the page.
+      } catch (err) {
+        // Don't error-toast just for opening the page, but log for debugging.
+        console.warn('[whatsapp] initial status fetch failed:', err?.message);
       }
     })();
     return () => stopPolling();
@@ -171,8 +175,7 @@ export default function IntegrationsPage() {
       const matchesConnected = showConnectedOnly ? isItemConnected(item) : true;
       return matchesSearch && matchesTab && matchesConnected;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, activeTab, showConnectedOnly, waStatusValue]);
+  }, [searchQuery, activeTab, showConnectedOnly, isItemConnected]);
 
   return (
     <div

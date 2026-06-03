@@ -46,13 +46,17 @@ function callBridge(method, pathSuffix, adminId) {
         });
         res.on('end', () => {
           if (res.statusCode >= 200 && res.statusCode < 300) {
-            let body = {};
             try {
-              body = data ? JSON.parse(data) : {};
-            } catch {
-              body = {};
+              resolve(data ? JSON.parse(data) : {});
+            } catch (parseErr) {
+              // A 2xx with non-JSON (proxy/nginx error page) is a fault, not a
+              // success — surface it as 502 instead of silently returning {}.
+              console.error('[whatsapp] bridge returned non-JSON on 2xx:', parseErr.message);
+              const err = new Error('bridge returned non-JSON');
+              err.code = 'BRIDGE_BAD_STATUS';
+              err.upstreamStatus = res.statusCode;
+              reject(err);
             }
-            resolve(body);
           } else {
             const err = new Error(`bridge responded ${res.statusCode}`);
             err.code = 'BRIDGE_BAD_STATUS';
