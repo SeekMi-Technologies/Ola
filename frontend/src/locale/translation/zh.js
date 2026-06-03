@@ -828,6 +828,15 @@ const lang = {
   integration_desc_sentry: '监控前后端错误与异常。',
   integration_desc_vercel: '部署预览版本与生产构建。',
   integration_desc_whatsapp: '通过 WhatsApp 商业账户与客户沟通。',
+  whatsapp_status_disconnected: '未接入',
+  whatsapp_status_connecting: '连接中…',
+  whatsapp_status_connected: '已接入',
+  whatsapp_status_logged_out: '设备已退出，请重新扫码',
+  whatsapp_gateway_unavailable: 'WhatsApp 网关暂不可用，请联系管理员',
+  whatsapp_connect_failed: 'WhatsApp 连接失败，请稍后重试',
+  whatsapp_disconnect_confirm: '确定取消接入？',
+  whatsapp_disconnect: '取消接入',
+  whatsapp_generating_qr: '正在生成二维码…',
 };
 
 export default lang;

@@ -828,6 +828,15 @@ const lang = {
   integration_desc_sentry: 'Track frontend and backend errors.',
   integration_desc_vercel: 'Deploy previews and production builds.',
   integration_desc_whatsapp: 'Chat with customers via WhatsApp Business.',
+  whatsapp_status_disconnected: 'Not connected',
+  whatsapp_status_connecting: 'Connecting…',
+  whatsapp_status_connected: 'Connected',
+  whatsapp_status_logged_out: 'Device logged out, please scan again',
+  whatsapp_gateway_unavailable: 'WhatsApp gateway is temporarily unavailable. Please contact your administrator.',
+  whatsapp_connect_failed: 'Failed to connect WhatsApp. Please try again later.',
+  whatsapp_disconnect_confirm: 'Disconnect WhatsApp?',
+  whatsapp_disconnect: 'Disconnect',
+  whatsapp_generating_qr: 'Generating QR code…',
 };
 
 export default lang;

@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react';
-import { Button, Input, Switch, Row, Col, Tag, Segmented, message, Modal } from 'antd';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Button, Input, Switch, Row, Col, message, Modal, QRCode, Spin } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { PageHeader } from '@ant-design/pro-layout';
 import useLanguage from '@/locale/useLanguage';
 import whatsappLogo from '@/style/images/whatsapp.png';
-import whatsappQr from '@/style/images/whatsapp_qr.png';
+import { waLogin, waStatus, waLogout } from '@/request/whatsapp';
 
 // Data lives outside the component so it is never recreated on render.
 // Descriptions are looked up by key at render time so language switches work.
@@ -12,7 +12,6 @@ const INTEGRATIONS_DATA = [
   {
     id: 'whatsapp',
     name: 'WhatsApp',
-    connected: false,
     popular: true,
     descriptionKey: 'integration_desc_whatsapp',
     logo: (
@@ -25,49 +24,138 @@ const INTEGRATIONS_DATA = [
   },
 ];
 
+// Observed bridge status → i18n label key + accent color.
+const STATUS_LABEL_KEY = {
+  disconnected: 'whatsapp_status_disconnected',
+  qr_pending: 'whatsapp_status_connecting',
+  connected: 'whatsapp_status_connected',
+  logged_out: 'whatsapp_status_logged_out',
+};
+const STATUS_COLOR = {
+  disconnected: '#8c8c8c',
+  qr_pending: '#1677ff',
+  connected: '#52c41a',
+  logged_out: '#fa8c16',
+};
+const POLL_MS = 2500;
+
 export default function IntegrationsPage() {
   const translate = useLanguage();
 
-  // Track only the mutable connection state; static data stays in INTEGRATIONS_DATA.
-  const [connectedIds, setConnectedIds] = useState(
-    () => new Set(INTEGRATIONS_DATA.filter((i) => i.connected).map((i) => i.id))
-  );
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('all');
-  const [showConnectedOnly, setShowConnectedOnly] = useState(false);
+  // Tabs / "connected only" bar is commented out below; these stay constant until it returns.
+  const activeTab = 'all';
+  const showConnectedOnly = false;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // TODO: replace with Redux dispatch + real backend endpoint when integration backend is wired
-  const handleToggleConnection = (id, name) => {
-    if (id === 'whatsapp' && !connectedIds.has('whatsapp')) {
-      setIsModalOpen(true);
-      return;
-    }
-    const wasConnected = connectedIds.has(id);
-    setConnectedIds((prev) => {
-      const next = new Set(prev);
-      if (wasConnected) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-    if (wasConnected) {
-      message.info(`${name} ${translate('integration_disconnected')}`);
-    } else {
-      message.success(`${name} ${translate('integration_connected')}`);
+  // WhatsApp live state, pulled from the bridge via the CRM proxy.
+  const [waStatusValue, setWaStatusValue] = useState('disconnected');
+  const [waQr, setWaQr] = useState(null);
+  const pollRef = useRef(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
   };
+
+  const isItemConnected = (item) => item.id === 'whatsapp' && waStatusValue === 'connected';
+
+  // Map an error to the right localized toast (503 = gateway down).
+  const toastError = (err) =>
+    message.error(
+      translate(err?.response?.status === 503 ? 'whatsapp_gateway_unavailable' : 'whatsapp_connect_failed')
+    );
+
+  const applyStatus = (result) => {
+    const next = result?.status || 'disconnected';
+    setWaStatusValue(next);
+    setWaQr(result?.qr || null);
+    if (next === 'connected') {
+      stopPolling();
+      setIsModalOpen(false);
+      message.success(`WhatsApp ${translate('integration_connected')}`);
+    }
+  };
+
+  const startPolling = () => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await waStatus();
+        applyStatus(res.result);
+      } catch (err) {
+        stopPolling();
+        setIsModalOpen(false);
+        setWaStatusValue('disconnected');
+        toastError(err);
+      }
+    }, POLL_MS);
+  };
+
+  const handleConnect = async () => {
+    setWaQr(null);
+    setIsModalOpen(true);
+    try {
+      const res = await waLogin();
+      setWaStatusValue(res.result?.status || 'qr_pending');
+      startPolling();
+    } catch (err) {
+      setIsModalOpen(false);
+      setWaStatusValue('disconnected');
+      toastError(err);
+    }
+  };
+
+  const confirmDisconnect = () => {
+    Modal.confirm({
+      title: translate('whatsapp_disconnect_confirm'),
+      okText: translate('whatsapp_disconnect'),
+      cancelText: translate('cancel'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await waLogout();
+          stopPolling();
+          setWaStatusValue('logged_out');
+          setWaQr(null);
+          message.info(`WhatsApp ${translate('integration_disconnected')}`);
+        } catch (err) {
+          toastError(err);
+        }
+      },
+    });
+  };
+
+  const handleSwitch = (checked) => {
+    if (checked) handleConnect();
+    else confirmDisconnect();
+  };
+
+  // Pull current status once on open (self-heals a stale UI); stop polling on unmount.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await waStatus();
+        setWaStatusValue(res.result?.status || 'disconnected');
+        setWaQr(res.result?.qr || null);
+      } catch {
+        // Silent on initial load — don't error-toast just for opening the page.
+      }
+    })();
+    return () => stopPolling();
+  }, []);
 
   const filteredIntegrations = useMemo(() => {
     return INTEGRATIONS_DATA.filter((item) => {
       const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesTab = activeTab === 'all' ? true : item.popular;
-      const matchesConnected = showConnectedOnly ? connectedIds.has(item.id) : true;
+      const matchesConnected = showConnectedOnly ? isItemConnected(item) : true;
       return matchesSearch && matchesTab && matchesConnected;
     });
-  }, [connectedIds, searchQuery, activeTab, showConnectedOnly]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, activeTab, showConnectedOnly, waStatusValue]);
 
   return (
     <div
@@ -120,7 +208,7 @@ export default function IntegrationsPage() {
       </PageHeader>
 
       {/* Tabs and Show Connected Switch Bar commented out as currently not needed */}
-      {/* 
+      {/*
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <Segmented
           options={[
@@ -146,13 +234,13 @@ export default function IntegrationsPage() {
       {/* Grid of integration cards */}
       <Row gutter={[24, 24]}>
         {filteredIntegrations.map((item) => {
-          const isConnected = connectedIds.has(item.id);
+          const isConnected = isItemConnected(item);
+          const statusValue = item.id === 'whatsapp' ? waStatusValue : 'disconnected';
           return (
             <Col xs={24} sm={12} md={8} key={item.id}>
               <div
                 className={`whiteBox shadow integration-card${isConnected ? ' integration-card--connected' : ''}`}
-                onClick={() => handleToggleConnection(item.id, item.name)}
-                style={{ cursor: 'pointer' }}
+                style={{ cursor: 'default' }}
               >
                 {/* Logo — always visible, no animation */}
                 <div className="integration-card__logo">
@@ -161,7 +249,7 @@ export default function IntegrationsPage() {
 
                 {/* Text area — clips the two sliding layers */}
                 <div className="integration-card__text-area">
-                  {/* Name + tag: slides up and out on hover */}
+                  {/* Name + status/switch */}
                   <div className="integration-card__name-row">
                     <span
                       style={{
@@ -175,22 +263,15 @@ export default function IntegrationsPage() {
                     >
                       {item.name}
                     </span>
-                    <div>
-                      {isConnected ? (
-                        <Tag
-                          color="success"
-                          style={{ borderRadius: '12px', border: 'none', padding: '2px 10px', fontSize: '12px', fontWeight: '500', margin: 0 }}
-                        >
-                          {translate('connected')}
-                        </Tag>
-                      ) : (
-                        <Tag
-                          color="default"
-                          style={{ borderRadius: '12px', border: '1px solid #d9d9d9', background: '#ffffff', color: '#8c8c8c', padding: '2px 10px', fontSize: '12px', fontWeight: '500', margin: 0 }}
-                        >
-                          {translate('connect')}
-                        </Tag>
-                      )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                      <span style={{ fontSize: '12px', fontWeight: 500, color: STATUS_COLOR[statusValue] }}>
+                        {translate(STATUS_LABEL_KEY[statusValue])}
+                      </span>
+                      <Switch
+                        checked={isConnected}
+                        loading={statusValue === 'qr_pending'}
+                        onChange={handleSwitch}
+                      />
                     </div>
                   </div>
                 </div>
@@ -218,7 +299,7 @@ export default function IntegrationsPage() {
         </div>
       )}
 
-      {/* Premium WhatsApp Connection Modal (Image 1 Style + Image 2 Content Refined) */}
+      {/* WhatsApp Connection Modal — live QR from the bridge */}
       <Modal
         title={
           <div style={{ fontSize: '20px', fontWeight: '600', color: '#1f1f1f', fontFamily: 'Inter, system-ui, sans-serif', paddingBottom: '16px', borderBottom: '1px solid #f0f0f0' }}>
@@ -248,14 +329,17 @@ export default function IntegrationsPage() {
             </ol>
           </div>
 
-          {/* Right Column: QR Code (More compact and elegant) */}
+          {/* Right Column: live QR (or a spinner while the bridge generates it) */}
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0 }}>
             <div style={{ border: '1px solid #e8e8e8', borderRadius: '12px', padding: '12px', background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-              <img
-                src={whatsappQr}
-                alt="Scan to Login"
-                style={{ width: '160px', height: '160px', display: 'block', objectFit: 'contain' }}
-              />
+              {waQr ? (
+                <QRCode value={waQr} size={160} bordered={false} />
+              ) : (
+                <div style={{ width: 184, height: 184, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', color: '#8c8c8c', fontSize: 13 }}>
+                  <Spin />
+                  <span>{translate('whatsapp_generating_qr')}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
