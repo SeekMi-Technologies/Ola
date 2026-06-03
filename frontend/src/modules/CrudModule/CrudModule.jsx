@@ -117,8 +117,8 @@ function SidePanelTopContent({ config, formElements, withUpload, extraReadConten
         )}
       </div>
       <ReadItem config={config} />
-      {(isReadBoxOpen || isEditBoxOpen) && extraReadContent}
       <UpdateForm config={config} formElements={formElements} withUpload={withUpload} />
+      {(isReadBoxOpen || isEditBoxOpen) && extraReadContent}
     </>
   );
 }

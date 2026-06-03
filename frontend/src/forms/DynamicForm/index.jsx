@@ -10,6 +10,57 @@ import { generate as uniqueId } from 'shortid';
 
 import { countryList } from '@/utils/countryList';
 
+const AutoWidthInput = ({ value, onChange, placeholder, ...props }) => {
+  const charCount = value ? value.toString().length : 0;
+  const placeholderCount = placeholder ? placeholder.toString().length : 0;
+  const displayLength = Math.max(charCount, placeholderCount);
+  const calculatedWidth = Math.max(130, Math.min(320, displayLength * 8.5 + 24));
+
+  return (
+    <Input
+      value={value}
+      placeholder={placeholder}
+      onChange={onChange}
+      style={{ width: `${calculatedWidth}px`, transition: 'width 0.15s' }}
+      {...props}
+    />
+  );
+};
+
+const AutoWidthCountrySelect = ({ value, onChange, translate }) => {
+  const selectedCountry = countryList.find((obj) => obj.value === value);
+  const labelText = selectedCountry ? translate(selectedCountry.label) : '';
+  const length = labelText.toString().length;
+  const calculatedWidth = Math.max(140, Math.min(320, length * 8.5 + 45));
+
+  return (
+    <Select
+      showSearch
+      value={value}
+      onChange={onChange}
+      optionFilterProp="children"
+      filterOption={(input, option) =>
+        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+      }
+      filterSort={(optionA, optionB) =>
+        (optionA?.label ?? '').toLowerCase().startsWith((optionB?.label ?? '').toLowerCase())
+      }
+      style={{ width: `${calculatedWidth}px`, transition: 'width 0.15s' }}
+    >
+      {countryList.map((language) => (
+        <Select.Option
+          key={language.value}
+          value={language.value}
+          label={translate(language.label)}
+        >
+          {language?.icon && language?.icon + ' '}
+          {translate(language.label)}
+        </Select.Option>
+      ))}
+    </Select>
+  );
+};
+
 export default function DynamicForm({ fields, isUpdateForm = false }) {
   const [feedback, setFeedback] = useState();
 
@@ -227,31 +278,7 @@ function FormElement({ field, feedback, setFeedback }) {
         },
       ]}
     >
-      <Select
-        showSearch
-        defaultValue={field.defaultValue}
-        optionFilterProp="children"
-        filterOption={(input, option) =>
-          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-        }
-        filterSort={(optionA, optionB) =>
-          (optionA?.label ?? '').toLowerCase().startsWith((optionB?.label ?? '').toLowerCase())
-        }
-        style={{
-          width: '100%',
-        }}
-      >
-        {countryList.map((language) => (
-          <Select.Option
-            key={language.value}
-            value={language.value}
-            label={translate(language.label)}
-          >
-            {language?.icon && language?.icon + ' '}
-            {translate(language.label)}
-          </Select.Option>
-        ))}
-      </Select>
+      <AutoWidthCountrySelect translate={translate} />
     </Form.Item>
   );
 
@@ -296,13 +323,13 @@ function FormElement({ field, feedback, setFeedback }) {
 
   const compunedComponent = {
     string: (
-      <Input autoComplete="off" maxLength={field.maxLength} defaultValue={field.defaultValue} />
+      <AutoWidthInput autoComplete="off" maxLength={field.maxLength} defaultValue={field.defaultValue} />
     ),
     url: <Input addonBefore="http://" autoComplete="off" placeholder="www.example.com" />,
     textarea: <TextArea rows={4} />,
-    email: <Input autoComplete="off" placeholder="email@example.com" />,
+    email: <AutoWidthInput autoComplete="off" placeholder="email@example.com" />,
     number: <InputNumber style={{ width: '100%' }} />,
-    phone: <Input style={{ width: '100%' }} placeholder="+1 123 456 789" />,
+    phone: <AutoWidthInput autoComplete="off" placeholder="+1 123 456 789" />,
     boolean: (
       <Switch
         checkedChildren={<CheckOutlined />}
