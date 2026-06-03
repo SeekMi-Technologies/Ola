@@ -1,6 +1,7 @@
 import CrudModule from '@/modules/CrudModule/CrudModule';
 import DynamicForm from '@/forms/DynamicForm';
 import { fields } from './config';
+import EntityTrail from '@/components/EntityTrail';
 
 import useLanguage from '@/locale/useLanguage';
 
@@ -36,9 +37,10 @@ export default function Factory() {
 
   return (  
     <CrudModule
-      createForm={<DynamicForm fields={fields} />}
-      updateForm={<DynamicForm fields={fields} />}
+      createForm={<DynamicForm fields={fields} isUpdateForm={true} />}
+      updateForm={<DynamicForm fields={fields} isUpdateForm={true} />}
       config={config}
+      extraReadContent={<EntityTrail entityType="Factory" />}
     />
   );
 }

@@ -523,6 +523,21 @@ function FormElement({ field, feedback, setFeedback, isUpdateForm = false, idx =
           isUpdateForm={true}
         />
       );
+    } else if (field.type === 'number') {
+      inputNode = (
+        <InputNumber
+          variant="borderless"
+          placeholder={translate(field.label)}
+          style={{
+            width: 'calc(100% + 11px)',
+            marginLeft: '-11px',
+            color: '#1f2937',
+            fontWeight: 500,
+            fontSize: '13.5px',
+            background: 'transparent',
+          }}
+        />
+      );
     } else {
       inputNode = customFormItem || renderComponent;
     }

@@ -119,6 +119,61 @@ function getMockResponse(config) {
             source: 'whatsapp', createdAt: '2026-05-30T20:15:00Z',
           },
         ],
+        '65b1abc11111111111111111': [
+          {
+            _id: 'mt1_1', entityType: 'Merch', entity: '65b1abc11111111111111111',
+            body: '上海电缆研究所测试报告已归档，符合 GB/T 12706 标准。主要出口东南亚国家。',
+            source: 'system', createdAt: '2026-06-02T10:00:00Z',
+          },
+          {
+            _id: 'mt1_2', entityType: 'Merch', entity: '65b1abc11111111111111111',
+            body: 'Manual log: This product is high-demand during summer projects. Double check availability of 240mm² steel tape armor before giving lead time.',
+            source: 'manual', createdBy: { _id: 'user_will', name: 'Will' },
+            createdAt: '2026-06-01T09:00:00Z',
+          }
+        ],
+        '65b2def22222222222222222': [
+          {
+            _id: 'mt2_1', entityType: 'Merch', entity: '65b2def22222222222222222',
+            body: '铜价波动剧烈，销售报价需参考当日长江有色金属现货铜价，当前基准定价按 ¥78,500/吨 计算。',
+            source: 'agent', createdAt: '2026-06-03T02:15:00Z',
+          }
+        ],
+        '65b3ghi33333333333333333': [
+          {
+            _id: 'mt3_1', entityType: 'Merch', entity: '65b3ghi33333333333333333',
+            body: '无卤低烟阻燃认证已更新，有效期至 2029 年。',
+            source: 'system', createdAt: '2026-05-28T09:00:00Z',
+          }
+        ],
+        '65c1abc11111111111111111': [
+          {
+            _id: 'ft1_1', entityType: 'Factory', entity: '65c1abc11111111111111111',
+            body: '供应商资质审查通过，特种电缆制造许可证已更新，有效期至 2028 年底。',
+            source: 'system', createdAt: '2026-06-02T11:00:00Z',
+          },
+          {
+            _id: 'ft1_2', entityType: 'Factory', entity: '65c1abc11111111111111111',
+            body: 'Manual log: Visited Zhejiang factory last week. Production capacity is fully booked for the next 4 weeks. Negotiated priority manufacturing for our next batch of armored cables.',
+            source: 'manual', createdBy: { _id: 'user_will', name: 'Will' },
+            createdAt: '2026-06-01T15:20:00Z',
+          }
+        ],
+        '65c2def22222222222222222': [
+          {
+            _id: 'ft2_1', entityType: 'Factory', entity: '65c2def22222222222222222',
+            body: '收到江苏厂家的最新中压电力电缆报价单，平均价格上浮 2%。主要受铜价上涨影响。',
+            source: 'agent', createdAt: '2026-06-03T09:10:00Z',
+          }
+        ],
+        '65c3ghi33333333333333333': [
+          {
+            _id: 'ft3_1', entityType: 'Factory', entity: '65c3ghi33333333333333333',
+            body: '佛山工厂已寄送 5 种无卤低烟阻燃样品进行检测，预计下周一到达我司。',
+            source: 'manual', createdBy: { _id: 'user_zyd', name: 'zhangyuandong' },
+            createdAt: '2026-05-30T14:00:00Z',
+          }
+        ]
       };
 
       // Extract entityId from URL query params
@@ -171,6 +226,101 @@ function getMockResponse(config) {
         result: mockClients,
         pagination: { page: 1, pages: 1, count: 3 },
         message: '[DEV MOCK] customer list',
+      };
+    }
+    if (url.includes('merch')) {
+      const mockMerchs = [
+        {
+          _id: '65b1abc11111111111111111',
+          serialNumber: 'YJLV22-4x240',
+          serialNumberLong: 'YJLV22-8.7/15kV-4x240',
+          description_en: 'Aluminum conductor XLPE insulated steel tape armored power cable',
+          description_cn: '铝芯交联聚乙烯绝缘钢带铠装电力电缆',
+          weight: 3.5,
+          VAT: 13,
+          ETR: 9,
+          unit_en: 'meter',
+          unit_cn: '米',
+          removed: false,
+          enabled: true,
+        },
+        {
+          _id: '65b2def22222222222222222',
+          serialNumber: 'VV22-3x185+1x95',
+          serialNumberLong: 'VV22-0.6/1kV-3x185+1x95',
+          description_en: 'Copper conductor PVC insulated steel tape armored power cable',
+          description_cn: '铜芯聚氯乙烯绝缘钢带铠装电力电缆',
+          weight: 6.8,
+          VAT: 13,
+          ETR: 9,
+          unit_en: 'meter',
+          unit_cn: '米',
+          removed: false,
+          enabled: true,
+        },
+        {
+          _id: '65b3ghi33333333333333333',
+          serialNumber: 'WDZ-BYJR-2.5',
+          serialNumberLong: 'WDZ-BYJR-450/750V-2.5',
+          description_en: 'Low smoke zero halogen flame retardant flexible wire',
+          description_cn: '无卤低烟阻燃软电线',
+          weight: 0.035,
+          VAT: 13,
+          ETR: 9,
+          unit_en: 'roll',
+          unit_cn: '卷',
+          removed: false,
+          enabled: true,
+        },
+      ];
+      return {
+        success: true,
+        result: mockMerchs,
+        pagination: { page: 1, pages: 1, count: 3 },
+        message: '[DEV MOCK] merchandise list',
+      };
+    }
+    if (url.includes('factory')) {
+      const mockFactories = [
+        {
+          _id: '65c1abc11111111111111111',
+          factory_code: 'FAC-001',
+          factory_name: 'Zhejiang Cable Manufacturing Co., Ltd.',
+          location: '浙江省杭州市余杭区高新工业园 18 号',
+          contact: '张建国 (Manager Zhang)',
+          tel1: '+86 571 8888 1234',
+          tel2: '+86 139 5711 2233',
+          removed: false,
+          enabled: true,
+        },
+        {
+          _id: '65c2def22222222222222222',
+          factory_code: 'FAC-002',
+          factory_name: 'Jiangsu Electric Wire & Cable Ltd.',
+          location: '江苏省无锡市宜兴市官林镇工业区',
+          contact: '李明 (Li Ming)',
+          tel1: '+86 510 8222 5678',
+          tel2: '+86 138 0510 6677',
+          removed: false,
+          enabled: true,
+        },
+        {
+          _id: '65c3ghi33333333333333333',
+          factory_code: 'FAC-003',
+          factory_name: 'Guangdong Specialty Cable Factory',
+          location: '广东省佛山市南海区大沥工业园',
+          contact: '陈志强 (Chen Zhiqiang)',
+          tel1: '+86 757 8555 9999',
+          tel2: '+86 137 0757 8888',
+          removed: false,
+          enabled: true,
+        },
+      ];
+      return {
+        success: true,
+        result: mockFactories,
+        pagination: { page: 1, pages: 1, count: 3 },
+        message: '[DEV MOCK] factory list',
       };
     }
     return {
@@ -248,6 +398,117 @@ function getMockResponse(config) {
           enabled: true,
         },
         message: '[DEV MOCK] mock read client 3',
+      };
+    }
+    if (url.includes('65b1abc11111111111111111')) {
+      return {
+        success: true,
+        result: {
+          _id: '65b1abc11111111111111111',
+          serialNumber: 'YJLV22-4x240',
+          serialNumberLong: 'YJLV22-8.7/15kV-4x240',
+          description_en: 'Aluminum conductor XLPE insulated steel tape armored power cable',
+          description_cn: '铝芯交联聚乙烯绝缘钢带铠装电力电缆',
+          weight: 3.5,
+          VAT: 13,
+          ETR: 9,
+          unit_en: 'meter',
+          unit_cn: '米',
+          removed: false,
+          enabled: true,
+        },
+        message: '[DEV MOCK] mock read merch 1',
+      };
+    }
+    if (url.includes('65b2def22222222222222222')) {
+      return {
+        success: true,
+        result: {
+          _id: '65b2def22222222222222222',
+          serialNumber: 'VV22-3x185+1x95',
+          serialNumberLong: 'VV22-0.6/1kV-3x185+1x95',
+          description_en: 'Copper conductor PVC insulated steel tape armored power cable',
+          description_cn: '铜芯聚氯乙烯绝缘钢带铠装电力电缆',
+          weight: 6.8,
+          VAT: 13,
+          ETR: 9,
+          unit_en: 'meter',
+          unit_cn: '米',
+          removed: false,
+          enabled: true,
+        },
+        message: '[DEV MOCK] mock read merch 2',
+      };
+    }
+    if (url.includes('65b3ghi33333333333333333')) {
+      return {
+        success: true,
+        result: {
+          _id: '65b3ghi33333333333333333',
+          serialNumber: 'WDZ-BYJR-2.5',
+          serialNumberLong: 'WDZ-BYJR-450/750V-2.5',
+          description_en: 'Low smoke zero halogen flame retardant flexible wire',
+          description_cn: '无卤低烟阻燃软电线',
+          weight: 0.035,
+          VAT: 13,
+          ETR: 9,
+          unit_en: 'roll',
+          unit_cn: '卷',
+          removed: false,
+          enabled: true,
+        },
+        message: '[DEV MOCK] mock read merch 3',
+      };
+    }
+    if (url.includes('65c1abc11111111111111111')) {
+      return {
+        success: true,
+        result: {
+          _id: '65c1abc11111111111111111',
+          factory_code: 'FAC-001',
+          factory_name: 'Zhejiang Cable Manufacturing Co., Ltd.',
+          location: '浙江省杭州市余杭区高新工业园 18 号',
+          contact: '张建国 (Manager Zhang)',
+          tel1: '+86 571 8888 1234',
+          tel2: '+86 139 5711 2233',
+          removed: false,
+          enabled: true,
+        },
+        message: '[DEV MOCK] mock read factory 1',
+      };
+    }
+    if (url.includes('65c2def22222222222222222')) {
+      return {
+        success: true,
+        result: {
+          _id: '65c2def22222222222222222',
+          factory_code: 'FAC-002',
+          factory_name: 'Jiangsu Electric Wire & Cable Ltd.',
+          location: '江苏省无锡市宜兴市官林镇工业区',
+          contact: '李明 (Li Ming)',
+          tel1: '+86 510 8222 5678',
+          tel2: '+86 138 0510 6677',
+          removed: false,
+          enabled: true,
+        },
+        message: '[DEV MOCK] mock read factory 2',
+      };
+    }
+    if (url.includes('65c3ghi33333333333333333')) {
+      return {
+        success: true,
+        result: {
+          _id: '65c3ghi33333333333333333',
+          factory_code: 'FAC-003',
+          factory_name: 'Guangdong Specialty Cable Factory',
+          location: '广东省佛山市南海区大沥工业园',
+          contact: '陈志强 (Chen Zhiqiang)',
+          tel1: '+86 757 8555 9999',
+          tel2: '+86 137 0757 8888',
+          removed: false,
+          enabled: true,
+        },
+        message: '[DEV MOCK] mock read factory 3',
       };
     }
     return {
