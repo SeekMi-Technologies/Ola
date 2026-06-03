@@ -21,14 +21,18 @@ export default function Quote() {
     {
       title: translate('Number'),
       dataIndex: 'number',
+      sorter: true,
     },
     {
       title: translate('Client'),
       dataIndex: ['client', 'name'],
+      sorter: true,
     },
     {
       title: translate('Date'),
       dataIndex: 'date',
+      sorter: true,
+      defaultSortOrder: 'descend',
       render: (date) => {
         return dayjs(date).format(dateFormat);
       },
@@ -36,6 +40,7 @@ export default function Quote() {
     {
       title: translate('expired Date'),
       dataIndex: 'expiredDate',
+      sorter: true,
       render: (date) => {
         return dayjs(date).format(dateFormat);
       },
@@ -43,6 +48,7 @@ export default function Quote() {
     {
       title: translate('Sub Total'),
       dataIndex: 'subTotal',
+      sorter: true,
       onCell: () => {
         return {
           style: {
@@ -57,6 +63,7 @@ export default function Quote() {
     {
       title: translate('Total'),
       dataIndex: 'total',
+      sorter: true,
       onCell: () => {
         return {
           style: {
@@ -72,6 +79,7 @@ export default function Quote() {
     {
       title: translate('Status'),
       dataIndex: 'status',
+      sorter: true,
       render: (status) => {
         let tagStatus = tagColor(status);
 

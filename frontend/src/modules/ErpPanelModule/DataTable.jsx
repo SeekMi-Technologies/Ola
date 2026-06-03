@@ -151,13 +151,33 @@ export default function DataTable({ config, extra = [] }) {
     },
   ];
 
-  const handelDataTableLoad = (pagination) => {
-    const options = { page: pagination.current || 1, items: pagination.pageSize || 10 };
+  const buildSortOptions = (sorter) => {
+    if (!sorter?.order) return {};
+    const field = Array.isArray(sorter.field) ? sorter.field.join('.') : sorter.field;
+    return { sortBy: field, sortValue: sorter.order === 'ascend' ? 1 : -1 };
+  };
+
+  const handelDataTableLoad = (pagination, _filters, sorter = {}) => {
+    const options = {
+      page: pagination?.current || 1,
+      items: pagination?.pageSize || 10,
+      ...buildSortOptions(sorter),
+    };
     dispatch(erp.list({ entity, options }));
   };
 
+  const defaultSortCol = dataTableColumns.find((c) => c.defaultSortOrder);
+
   const dispatcher = () => {
-    dispatch(erp.list({ entity }));
+    const options = {};
+    if (defaultSortCol) {
+      const field = Array.isArray(defaultSortCol.dataIndex)
+        ? defaultSortCol.dataIndex.join('.')
+        : defaultSortCol.dataIndex;
+      options.sortBy = field;
+      options.sortValue = defaultSortCol.defaultSortOrder === 'ascend' ? 1 : -1;
+    }
+    dispatch(erp.list({ entity, options }));
   };
 
   useEffect(() => {
