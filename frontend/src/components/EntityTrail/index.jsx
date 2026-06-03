@@ -12,6 +12,7 @@ import { selectCurrentItem } from '@/redux/crud/selectors';
 import { request } from '@/request';
 import useLanguage from '@/locale/useLanguage';
 import dayjs from 'dayjs';
+import { useCrudContext } from '@/context/crud';
 
 const MOCK_TRAILS = [
   {
@@ -88,6 +89,9 @@ export default function EntityTrail({ entityType }) {
   const currentResult = useSelector(selectCurrentItem);
   const currentItem = currentResult?.result;
   const entityId = currentItem?._id;
+
+  const { state: crudState } = useCrudContext();
+  const isEditBoxOpen = crudState?.isEditBoxOpen || false;
 
   const [trails, setTrails] = useState(MOCK_TRAILS);
   const [loading, setLoading] = useState(false);
@@ -191,7 +195,17 @@ export default function EntityTrail({ entityType }) {
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} data-testid="notes-timeline">
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          opacity: isEditBoxOpen ? 0.6 : 1,
+          pointerEvents: isEditBoxOpen ? 'none' : 'auto',
+          transition: 'opacity 0.2s ease',
+        }}
+        data-testid="notes-timeline"
+      >
         {trails.map((item) => {
           let tagBg = '#f3f4f6';
           let tagColor = '#374151';
@@ -291,28 +305,42 @@ export default function EntityTrail({ entityType }) {
 
   return (
     <div style={{ marginTop: '20px', padding: '0 4px' }} className="entity-trail-container">
-      <Divider style={{ margin: '16px 0', fontSize: '14px', fontWeight: 500 }} data-testid="notes-divider">
+      <Divider
+        style={{
+          margin: '16px 0',
+          fontSize: '14px',
+          fontWeight: 500,
+          opacity: isEditBoxOpen ? 0.6 : 1,
+          transition: 'opacity 0.2s ease',
+        }}
+        data-testid="notes-divider"
+      >
         {translate('notes')} ({trails.length})
       </Divider>
-      <div style={{
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-        border: '1px solid #e5e7eb',
-        borderRadius: '16px',
-        padding: '10px 14px',
-        background: '#ffffff',
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
-        transition: 'border-color 0.2s, box-shadow 0.2s',
-        marginBottom: '20px'
-      }} className="chatgpt-input-wrapper">
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          border: '1px solid #e5e7eb',
+          borderRadius: '16px',
+          padding: '10px 14px',
+          background: isEditBoxOpen ? '#f9fafb' : '#ffffff',
+          boxShadow: isEditBoxOpen ? 'none' : '0 2px 8px rgba(0, 0, 0, 0.03)',
+          transition: 'all 0.2s ease',
+          marginBottom: '20px',
+          opacity: isEditBoxOpen ? 0.6 : 1,
+          pointerEvents: isEditBoxOpen ? 'none' : 'auto',
+        }}
+        className="chatgpt-input-wrapper"
+      >
         <Input.TextArea
           autoSize={{ minRows: 2, maxRows: 6 }}
           value={inputBody}
           placeholder={translate('note_placeholder')}
           onChange={(e) => setInputBody(e.target.value)}
           maxLength={2000}
-          disabled={submitting}
+          disabled={submitting || isEditBoxOpen}
           variant="borderless"
           style={{
             padding: 0,
@@ -336,10 +364,10 @@ export default function EntityTrail({ entityType }) {
           </span>
           <Button
             type="text"
-            icon={<SendOutlined style={{ fontSize: '14px', color: isInputValid ? '#ffffff' : '#d1d5db' }} />}
+            icon={<SendOutlined style={{ fontSize: '14px', color: (isInputValid && !isEditBoxOpen) ? '#ffffff' : '#d1d5db' }} />}
             onClick={handleSubmit}
             loading={submitting}
-            disabled={!isInputValid || submitting}
+            disabled={!isInputValid || submitting || isEditBoxOpen}
             style={{
               width: '28px',
               height: '28px',
@@ -347,11 +375,11 @@ export default function EntityTrail({ entityType }) {
               display: 'inline-flex',
               justifyContent: 'center',
               alignItems: 'center',
-              background: isInputValid ? '#10b981' : '#f3f4f6',
+              background: (isInputValid && !isEditBoxOpen) ? '#10b981' : '#f3f4f6',
               transition: 'all 0.2s',
               border: 'none',
               padding: 0,
-              cursor: isInputValid ? 'pointer' : 'not-allowed',
+              cursor: (isInputValid && !isEditBoxOpen) ? 'pointer' : 'not-allowed',
             }}
             data-testid="note-submit-btn"
           />

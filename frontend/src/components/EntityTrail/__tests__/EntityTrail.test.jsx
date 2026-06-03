@@ -29,11 +29,15 @@ const makeStore = ({ currentItem = null } = {}) =>
     },
   });
 
+import { CrudContextProvider } from '@/context/crud';
+
 const renderEntityTrail = ({ currentItem = null, entityType = 'Client' } = {}) => {
   const store = makeStore({ currentItem });
   const utils = render(
     <Provider store={store}>
-      <EntityTrail entityType={entityType} />
+      <CrudContextProvider>
+        <EntityTrail entityType={entityType} />
+      </CrudContextProvider>
     </Provider>
   );
   return { ...utils, store };
