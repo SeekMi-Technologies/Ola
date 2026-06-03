@@ -837,6 +837,11 @@ const lang = {
   whatsapp_disconnect_confirm: 'Disconnect WhatsApp?',
   whatsapp_disconnect: 'Disconnect',
   whatsapp_generating_qr: 'Generating QR code…',
+  whatsapp_modal_title: 'Connect a WhatsApp account',
+  whatsapp_step_1: 'Open WhatsApp on your phone',
+  whatsapp_step_2: 'Tap "Settings", then select "Linked Devices"',
+  whatsapp_step_3: 'Tap "Link a new device"',
+  whatsapp_step_4: 'Point your phone at this screen to scan the QR code',
 };
 
 export default lang;

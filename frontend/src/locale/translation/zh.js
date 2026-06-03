@@ -837,6 +837,11 @@ const lang = {
   whatsapp_disconnect_confirm: '确定取消接入？',
   whatsapp_disconnect: '取消接入',
   whatsapp_generating_qr: '正在生成二维码…',
+  whatsapp_modal_title: '关联 WhatsApp 账号',
+  whatsapp_step_1: '在手机上打开 WhatsApp',
+  whatsapp_step_2: '点击「设置」，然后选择「已关联的设备」',
+  whatsapp_step_3: '点击「关联新设备」',
+  whatsapp_step_4: '用手机对准本屏幕扫描二维码',
 };
 
 export default lang;

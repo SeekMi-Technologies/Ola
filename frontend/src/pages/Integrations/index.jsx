@@ -29,14 +29,15 @@ const STATUS_LABEL_KEY = {
   disconnected: 'whatsapp_status_disconnected',
   qr_pending: 'whatsapp_status_connecting',
   connected: 'whatsapp_status_connected',
-  logged_out: 'whatsapp_status_logged_out',
 };
 const STATUS_COLOR = {
   disconnected: '#8c8c8c',
   qr_pending: '#1677ff',
   connected: '#52c41a',
-  logged_out: '#fa8c16',
 };
+// logged_out / unknown collapse to "not connected" in the UI — no separate display.
+const labelKeyFor = (s) => STATUS_LABEL_KEY[s] || STATUS_LABEL_KEY.disconnected;
+const colorFor = (s) => STATUS_COLOR[s] || STATUS_COLOR.disconnected;
 const POLL_MS = 2500;
 
 export default function IntegrationsPage() {
@@ -79,19 +80,22 @@ export default function IntegrationsPage() {
     }
   };
 
+  const pollOnce = async () => {
+    try {
+      const res = await waStatus();
+      applyStatus(res.result);
+    } catch (err) {
+      stopPolling();
+      setIsModalOpen(false);
+      setWaStatusValue('disconnected');
+      toastError(err);
+    }
+  };
+
   const startPolling = () => {
     stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await waStatus();
-        applyStatus(res.result);
-      } catch (err) {
-        stopPolling();
-        setIsModalOpen(false);
-        setWaStatusValue('disconnected');
-        toastError(err);
-      }
-    }, POLL_MS);
+    pollOnce(); // fire immediately so the QR shows without waiting a full interval
+    pollRef.current = setInterval(pollOnce, POLL_MS);
   };
 
   const handleConnect = async () => {
@@ -118,7 +122,7 @@ export default function IntegrationsPage() {
         try {
           await waLogout();
           stopPolling();
-          setWaStatusValue('logged_out');
+          setWaStatusValue('disconnected');
           setWaQr(null);
           message.info(`WhatsApp ${translate('integration_disconnected')}`);
         } catch (err) {
@@ -131,6 +135,19 @@ export default function IntegrationsPage() {
   const handleSwitch = (checked) => {
     if (checked) handleConnect();
     else confirmDisconnect();
+  };
+
+  // Closing the QR dialog before scanning cancels the attempt: stop polling,
+  // tear down the pending bridge client, and return to a clean "not connected"
+  // instead of a stuck "connecting".
+  const handleModalCancel = () => {
+    setIsModalOpen(false);
+    if (waStatusValue === 'qr_pending') {
+      stopPolling();
+      setWaQr(null);
+      setWaStatusValue('disconnected');
+      waLogout().catch((err) => console.warn('WhatsApp connect cancel teardown failed:', err?.message));
+    }
   };
 
   // Pull current status once on open (self-heals a stale UI); stop polling on unmount.
@@ -264,12 +281,11 @@ export default function IntegrationsPage() {
                       {item.name}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                      <span style={{ fontSize: '12px', fontWeight: 500, color: STATUS_COLOR[statusValue] }}>
-                        {translate(STATUS_LABEL_KEY[statusValue])}
+                      <span style={{ fontSize: '12px', fontWeight: 500, color: colorFor(statusValue) }}>
+                        {translate(labelKeyFor(statusValue))}
                       </span>
                       <Switch
                         checked={isConnected}
-                        loading={statusValue === 'qr_pending'}
                         onChange={handleSwitch}
                       />
                     </div>
@@ -303,11 +319,11 @@ export default function IntegrationsPage() {
       <Modal
         title={
           <div style={{ fontSize: '20px', fontWeight: '600', color: '#1f1f1f', fontFamily: 'Inter, system-ui, sans-serif', paddingBottom: '16px', borderBottom: '1px solid #f0f0f0' }}>
-            Connect a WhatsApp account
+            {translate('whatsapp_modal_title')}
           </div>
         }
         open={isModalOpen}
-        onCancel={() => setIsModalOpen(false)}
+        onCancel={handleModalCancel}
         footer={null}
         width={640}
         centered
@@ -322,10 +338,10 @@ export default function IntegrationsPage() {
           {/* Left Column: Instructions */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <ol style={{ paddingLeft: '20px', margin: 0, display: 'flex', flexDirection: 'column', gap: '14px', color: '#595959', fontSize: '14px', lineHeight: '1.6' }}>
-              <li>Open WhatsApp on your phone</li>
-              <li>Tap <strong style={{ color: '#262626' }}>"You"</strong>, then under <strong style={{ color: '#262626' }}>"Settings"</strong> select <strong style={{ color: '#262626' }}>"Linked Devices"</strong></li>
-              <li>Tap on <strong style={{ color: '#262626' }}>Link a device</strong></li>
-              <li>Point your phone to this screen to capture the QR code</li>
+              <li>{translate('whatsapp_step_1')}</li>
+              <li>{translate('whatsapp_step_2')}</li>
+              <li>{translate('whatsapp_step_3')}</li>
+              <li>{translate('whatsapp_step_4')}</li>
             </ol>
           </div>
 
