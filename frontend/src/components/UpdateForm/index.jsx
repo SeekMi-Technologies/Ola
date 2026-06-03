@@ -97,11 +97,11 @@ export default function UpdateForm({ config, formElements, withUpload = false })
           layout="vertical"
           onFinish={onSubmit}
           style={{
-            background: '#f9fafb',
-            border: '1px solid #f3f4f6',
+            background: '#ffffff',
+            border: '1px solid #e5e7eb',
             borderRadius: '12px',
-            padding: '16px',
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
+            padding: '4px 16px',
+            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
             marginBottom: '24px',
           }}
         >

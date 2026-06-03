@@ -18,23 +18,65 @@ const MOCK_TRAILS = [
     _id: 'mock_trail_1',
     entityType: 'Client',
     entity: 'mock_id',
-    body: '周五电话确认预算，客户倾向 1000m 屏蔽电缆...',
+    body: '客户确认采购 1000m YJLV 22 4×240mm² 铠装电力电缆，交期要求 8 周以内。需要我们提供 CCC 认证副本和第三方检测报告，报价含 13% 增值税。',
     source: 'agent',
-    createdAt: '2026-05-22T14:30:00Z',
+    createdAt: '2026-06-02T16:30:00Z',
   },
   {
     _id: 'mock_trail_2',
     entityType: 'Client',
     entity: 'mock_id',
-    body: '客户问 1000m 屏蔽电缆，预算未问',
-    source: 'agent',
-    createdAt: '2026-05-20T09:15:00Z',
+    body: 'Follow-up call completed. Client is comparing our quote with 2 other suppliers. Key decision factors: delivery time and after-sales warranty. Decision expected by end of next week.',
+    source: 'manual',
+    createdBy: { _id: 'user_will', name: 'Will' },
+    createdAt: '2026-06-01T10:15:00Z',
   },
   {
     _id: 'mock_trail_3',
     entityType: 'Client',
     entity: 'mock_id',
-    body: '初次接触，VIP 标记',
+    body: 'WhatsApp: "Hi, could you send me the updated price list for armored cables? We need it before the board meeting on Friday. Thanks!"',
+    source: 'whatsapp',
+    createdAt: '2026-05-30T09:42:00Z',
+  },
+  {
+    _id: 'mock_trail_4',
+    entityType: 'Client',
+    entity: 'mock_id',
+    body: '报价单 QT-2026-0042 已发送至客户邮箱 info@sinocable.cn，总金额 ¥487,500.00（含税）。',
+    source: 'system',
+    createdAt: '2026-05-28T14:00:00Z',
+  },
+  {
+    _id: 'mock_trail_5',
+    entityType: 'Client',
+    entity: 'mock_id',
+    body: 'Email from client:\n\nDear Team,\n\nThank you for the quotation. We would like to request a 5% volume discount given our order quantity. Also, please confirm whether you can ship via Maersk to Shekou port.\n\nBest regards,\nLiu Wei\nProcurement Manager',
+    source: 'email',
+    createdAt: '2026-05-27T08:20:00Z',
+  },
+  {
+    _id: 'mock_trail_6',
+    entityType: 'Client',
+    entity: 'mock_id',
+    body: '与客户刘经理午餐会面，讨论了长期合作框架协议。客户年用量预估约 5000 万元，主要品类为中低压电力电缆和控制电缆。下一步：准备框架协议草案。',
+    source: 'manual',
+    createdBy: { _id: 'user_zyd', name: 'zhangyuandong' },
+    createdAt: '2026-05-25T12:30:00Z',
+  },
+  {
+    _id: 'mock_trail_7',
+    entityType: 'Client',
+    entity: 'mock_id',
+    body: '客户信用评估完成：评级 A，建议授信额度 ¥200 万。',
+    source: 'system',
+    createdAt: '2026-05-22T17:00:00Z',
+  },
+  {
+    _id: 'mock_trail_8',
+    entityType: 'Client',
+    entity: 'mock_id',
+    body: '初次接触，客户来源：2026广州国际电线电缆展。联系人刘伟，采购经理，主要采购铠装电缆和屏蔽电缆。已标记为 VIP 潜在客户。',
     source: 'manual',
     createdBy: { _id: 'admin_mock', name: 'zhangyuandong' },
     createdAt: '2026-05-18T16:42:00Z',
@@ -152,29 +194,44 @@ export default function EntityTrail({ entityType }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} data-testid="notes-timeline">
         {trails.map((item) => {
           let tagBg = '#f3f4f6';
-          let tagColor = '#4b5563';
+          let tagColor = '#374151';
+          let tagBorder = '1px solid #e5e7eb';
           let tagLabel = item.source || '';
           let icon = null;
 
           if (item.source === 'agent') {
-            tagBg = '#eff6ff';
-            tagColor = '#1d4ed8';
+            tagBg = '#e0f2fe';
+            tagColor = '#0369a1';
+            tagBorder = '1px solid #bae6fd';
             tagLabel = translate('note_source_agent');
             icon = <RobotOutlined style={{ marginRight: '4px' }} />;
           } else if (item.source === 'manual') {
-            tagBg = '#ecfdf5';
-            tagColor = '#047857';
+            tagBg = '#dcfce7';
+            tagColor = '#15803d';
+            tagBorder = '1px solid #bbf7d0';
             tagLabel = item.createdBy?.name || translate('note_source_manual');
             icon = <UserOutlined style={{ marginRight: '4px' }} />;
           } else if (item.source === 'system') {
-            tagBg = '#fff7ed';
-            tagColor = '#c2410c';
+            tagBg = '#fee2e2';
+            tagColor = '#b91c1c';
+            tagBorder = '1px solid #fecaca';
             tagLabel = translate('note_source_system');
             icon = <SettingOutlined style={{ marginRight: '4px' }} />;
-          } else if (['whatsapp', 'wechat', 'email'].includes(item.source)) {
-            tagBg = '#f4f4f5';
-            tagColor = '#71717a';
-            tagLabel = item.source;
+          } else if (item.source === 'whatsapp') {
+            tagBg = '#e6f4ea';
+            tagColor = '#137333';
+            tagBorder = '1px solid #c4eed0';
+            tagLabel = 'WhatsApp';
+          } else if (item.source === 'wechat') {
+            tagBg = '#e6f4ea';
+            tagColor = '#137333';
+            tagBorder = '1px solid #c4eed0';
+            tagLabel = 'WeChat';
+          } else if (item.source === 'email') {
+            tagBg = '#fef3c7';
+            tagColor = '#b45309';
+            tagBorder = '1px solid #fde68a';
+            tagLabel = 'Email';
           }
 
           return (
@@ -197,6 +254,7 @@ export default function EntityTrail({ entityType }) {
                       alignItems: 'center',
                       background: tagBg,
                       color: tagColor,
+                      border: tagBorder,
                       padding: '2px 8px',
                       borderRadius: '12px',
                       fontSize: '11px',

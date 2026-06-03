@@ -46,6 +46,93 @@ function getMockResponse(config) {
 
   // --- list / listAll → empty paginated list ---
   if (url.includes('/list')) {
+    // --- trail notes per client ---
+    if (url.includes('trail')) {
+      const MOCK_TRAILS_BY_CLIENT = {
+        '65a1abc11111111111111111': [
+          {
+            _id: 't1_1', entityType: 'Client', entity: '65a1abc11111111111111111',
+            body: '客户确认采购 1000m YJLV 22 4×240mm² 铠装电力电缆，交期要求 8 周以内。需要我们提供 CCC 认证副本和第三方检测报告，报价含 13% 增值税。',
+            source: 'agent', createdAt: '2026-06-02T16:30:00Z',
+          },
+          {
+            _id: 't1_2', entityType: 'Client', entity: '65a1abc11111111111111111',
+            body: 'Follow-up call completed. Client is comparing our quote with 2 other suppliers. Key decision factors: delivery time and after-sales warranty. Decision expected by end of next week.',
+            source: 'manual', createdBy: { _id: 'user_will', name: 'Will' },
+            createdAt: '2026-06-01T10:15:00Z',
+          },
+          {
+            _id: 't1_3', entityType: 'Client', entity: '65a1abc11111111111111111',
+            body: 'WhatsApp: "Hi, could you send me the updated price list for armored cables? We need it before the board meeting on Friday. Thanks!"',
+            source: 'whatsapp', createdAt: '2026-05-30T09:42:00Z',
+          },
+          {
+            _id: 't1_4', entityType: 'Client', entity: '65a1abc11111111111111111',
+            body: '报价单 QT-2026-0042 已发送至客户邮箱 contact@nextable.com，总金额 ¥487,500.00（含税）。',
+            source: 'system', createdAt: '2026-05-28T14:00:00Z',
+          },
+          {
+            _id: 't1_5', entityType: 'Client', entity: '65a1abc11111111111111111',
+            body: '初次接触，客户来源：2026 广州国际电线电缆展。联系人 Tommy Chan，采购总监。已标记为 VIP 潜在客户。',
+            source: 'manual', createdBy: { _id: 'user_zyd', name: 'zhangyuandong' },
+            createdAt: '2026-05-18T16:42:00Z',
+          },
+        ],
+        '65a2def22222222222222222': [
+          {
+            _id: 't2_1', entityType: 'Client', entity: '65a2def22222222222222222',
+            body: 'Email from client:\n\nDear Team,\n\nThank you for the quotation. We would like to request a 5% volume discount given our order quantity. Also, please confirm whether you can ship via Maersk to Shekou port.\n\nBest regards,\nLiu Wei\nProcurement Manager',
+            source: 'email', createdAt: '2026-06-02T08:20:00Z',
+          },
+          {
+            _id: 't2_2', entityType: 'Client', entity: '65a2def22222222222222222',
+            body: '与客户刘经理午餐会面，讨论了长期合作框架协议。客户年用量预估约 5000 万元，主要品类为中低压电力电缆和控制电缆。下一步：准备框架协议草案。',
+            source: 'manual', createdBy: { _id: 'user_zyd', name: 'zhangyuandong' },
+            createdAt: '2026-05-25T12:30:00Z',
+          },
+          {
+            _id: 't2_3', entityType: 'Client', entity: '65a2def22222222222222222',
+            body: '客户信用评估完成：评级 A，建议授信额度 ¥200 万。',
+            source: 'system', createdAt: '2026-05-22T17:00:00Z',
+          },
+          {
+            _id: 't2_4', entityType: 'Client', entity: '65a2def22222222222222222',
+            body: '电话沟通，客户对 BV/BVR 系列家装线缆也有需求，预计年采购量 300 万左右。已安排样品寄送。',
+            source: 'agent', createdAt: '2026-05-20T15:10:00Z',
+          },
+        ],
+        '65a3ghi33333333333333333': [
+          {
+            _id: 't3_1', entityType: 'Client', entity: '65a3ghi33333333333333333',
+            body: 'Initial outreach via LinkedIn. Client is exploring cable suppliers in Asia-Pacific for their manufacturing plants in Ohio and Michigan. Interested in UL-certified products.',
+            source: 'manual', createdBy: { _id: 'user_will', name: 'Will' },
+            createdAt: '2026-06-01T14:00:00Z',
+          },
+          {
+            _id: 't3_2', entityType: 'Client', entity: '65a3ghi33333333333333333',
+            body: 'Sent product catalog and UL certification documents to info@iue-cwa.org.',
+            source: 'system', createdAt: '2026-05-29T11:30:00Z',
+          },
+          {
+            _id: 't3_3', entityType: 'Client', entity: '65a3ghi33333333333333333',
+            body: 'WhatsApp: "We received the catalog. Very impressive range. Can you arrange a video call next Tuesday to discuss pricing for THHN/THWN cables?"',
+            source: 'whatsapp', createdAt: '2026-05-30T20:15:00Z',
+          },
+        ],
+      };
+
+      // Extract entityId from URL query params
+      const idMatch = url.match(/entityid=([a-z0-9]+)/i);
+      const entityId = idMatch ? idMatch[1] : '';
+      const trails = MOCK_TRAILS_BY_CLIENT[entityId] || [];
+
+      return {
+        success: true,
+        result: trails,
+        message: '[DEV MOCK] trail list for ' + entityId,
+      };
+    }
+
     if (url.includes('client')) {
       const mockClients = [
         {

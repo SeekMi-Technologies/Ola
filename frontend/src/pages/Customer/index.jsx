@@ -33,7 +33,7 @@ export default function Customer() {
   return (
     <CrudModule
       createForm={<DynamicForm fields={fields} />}
-      updateForm={<DynamicForm fields={fields} />}
+      updateForm={<DynamicForm fields={fields} isUpdateForm={true} />}
       config={config}
       extraReadContent={<EntityTrail entityType="Client" />}
     />

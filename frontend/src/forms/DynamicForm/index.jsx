@@ -10,28 +10,112 @@ import { generate as uniqueId } from 'shortid';
 
 import { countryList } from '@/utils/countryList';
 
-const AutoWidthInput = ({ value, onChange, placeholder, ...props }) => {
-  const charCount = value ? value.toString().length : 0;
-  const placeholderCount = placeholder ? placeholder.toString().length : 0;
+const AutoWidthInput = ({ value, onChange, placeholder, isUpdateForm = false, ...props }) => {
+  const getVisualLength = (str) => {
+    if (!str) return 0;
+    let len = 0;
+    for (let i = 0; i < str.length; i++) {
+      if (str.charCodeAt(i) > 127) {
+        len += 1.8;
+      } else {
+        len += 1;
+      }
+    }
+    return len;
+  };
+
+  if (isUpdateForm) {
+    return (
+      <Input.TextArea
+        value={value}
+        placeholder={placeholder}
+        onChange={onChange}
+        autoSize={{ minRows: 1 }}
+        style={{
+          width: '100%',
+          color: '#1f2937',
+          fontWeight: 500,
+          fontSize: '13.5px',
+          lineHeight: '1.5',
+          padding: '0 0',
+          margin: '0',
+          resize: 'none',
+          borderRadius: '4px',
+          border: '1px solid transparent',
+          background: 'transparent',
+          transition: 'border-color 0.2s, background 0.2s',
+          wordBreak: 'break-word',
+        }}
+        onFocus={(e) => {
+          e.target.style.borderColor = '#d1d5db';
+          e.target.style.background = '#ffffff';
+        }}
+        onBlur={(e) => {
+          e.target.style.borderColor = 'transparent';
+          e.target.style.background = 'transparent';
+        }}
+        {...props}
+      />
+    );
+  }
+
+  const charCount = value ? getVisualLength(value.toString()) : 0;
+  const placeholderCount = placeholder ? getVisualLength(placeholder.toString()) : 0;
   const displayLength = Math.max(charCount, placeholderCount);
-  const calculatedWidth = Math.max(130, Math.min(320, displayLength * 8.5 + 24));
+  const calculatedWidth = Math.max(140, Math.min(300, displayLength * 8.5 + 24));
 
   return (
     <Input
       value={value}
       placeholder={placeholder}
       onChange={onChange}
-      style={{ width: `${calculatedWidth}px`, transition: 'width 0.15s' }}
+      style={{
+        width: `${calculatedWidth}px`,
+        maxWidth: '100%',
+        transition: 'width 0.15s',
+        color: '#1f2937',
+        fontWeight: 500,
+        fontSize: '13.5px',
+      }}
       {...props}
     />
   );
 };
 
-const AutoWidthCountrySelect = ({ value, onChange, translate }) => {
+const AutoWidthCountrySelect = ({ value, onChange, translate, isUpdateForm = false }) => {
+  const getVisualLength = (str) => {
+    if (!str) return 0;
+    let len = 0;
+    for (let i = 0; i < str.length; i++) {
+      if (str.charCodeAt(i) > 127) {
+        len += 1.8;
+      } else {
+        len += 1;
+      }
+    }
+    return len;
+  };
+
   const selectedCountry = countryList.find((obj) => obj.value === value);
   const labelText = selectedCountry ? translate(selectedCountry.label) : '';
-  const length = labelText.toString().length;
-  const calculatedWidth = Math.max(140, Math.min(320, length * 8.5 + 45));
+  const length = getVisualLength(labelText.toString());
+
+  const style = isUpdateForm
+    ? {
+        width: 'calc(100% + 11px)',
+        marginLeft: '-11px',
+        color: '#1f2937',
+        fontWeight: 500,
+        fontSize: '13.5px',
+      }
+    : {
+        width: `${Math.max(140, Math.min(300, length * 8.5 + 45))}px`,
+        maxWidth: '100%',
+        transition: 'width 0.15s',
+        color: '#1f2937',
+        fontWeight: 500,
+        fontSize: '13.5px',
+      };
 
   return (
     <Select
@@ -39,13 +123,14 @@ const AutoWidthCountrySelect = ({ value, onChange, translate }) => {
       value={value}
       onChange={onChange}
       optionFilterProp="children"
+      variant={isUpdateForm ? 'borderless' : undefined}
       filterOption={(input, option) =>
         (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
       }
       filterSort={(optionA, optionB) =>
         (optionA?.label ?? '').toLowerCase().startsWith((optionB?.label ?? '').toLowerCase())
       }
-      style={{ width: `${calculatedWidth}px`, transition: 'width 0.15s' }}
+      style={style}
     >
       {countryList.map((language) => (
         <Select.Option
@@ -63,10 +148,11 @@ const AutoWidthCountrySelect = ({ value, onChange, translate }) => {
 
 export default function DynamicForm({ fields, isUpdateForm = false }) {
   const [feedback, setFeedback] = useState();
+  const total = Object.keys(fields).length;
 
   return (
     <div>
-      {Object.keys(fields).map((key) => {
+      {Object.keys(fields).map((key, idx) => {
         let field = fields[key];
 
         if ((isUpdateForm && !field.disableForUpdate) || !field.disableForForm) {
@@ -74,12 +160,37 @@ export default function DynamicForm({ fields, isUpdateForm = false }) {
           if (!field.label) field.label = key;
           if (field.hasFeedback)
             return (
-              <FormElement feedback={feedback} setFeedback={setFeedback} key={key} field={field} />
+              <FormElement
+                feedback={feedback}
+                setFeedback={setFeedback}
+                key={key}
+                field={field}
+                isUpdateForm={isUpdateForm}
+                idx={idx}
+                total={total}
+              />
             );
           else if (feedback && field.feedback) {
-            if (feedback == field.feedback) return <FormElement key={key} field={field} />;
+            if (feedback == field.feedback)
+              return (
+                <FormElement
+                  key={key}
+                  field={field}
+                  isUpdateForm={isUpdateForm}
+                  idx={idx}
+                  total={total}
+                />
+              );
           } else {
-            return <FormElement key={key} field={field} />;
+            return (
+              <FormElement
+                key={key}
+                field={field}
+                isUpdateForm={isUpdateForm}
+                idx={idx}
+                total={total}
+              />
+            );
           }
         }
       })}
@@ -87,7 +198,7 @@ export default function DynamicForm({ fields, isUpdateForm = false }) {
   );
 }
 
-function FormElement({ field, feedback, setFeedback }) {
+function FormElement({ field, feedback, setFeedback, isUpdateForm = false, idx = 0, total = 0 }) {
   const translate = useLanguage();
   const money = useMoney();
   const { dateFormat } = useDate();
@@ -391,6 +502,73 @@ function FormElement({ field, feedback, setFeedback }) {
 
   if (!renderComponent) {
     renderComponent = compunedComponent['string'];
+  }
+
+  if (isUpdateForm) {
+    const isLast = idx === total - 1;
+    let inputNode;
+
+    if (field.type === 'country') {
+      inputNode = <AutoWidthCountrySelect translate={translate} isUpdateForm={true} />;
+    } else if (field.type === 'string' || field.type === 'email' || field.type === 'phone') {
+      inputNode = (
+        <AutoWidthInput
+          autoComplete="off"
+          maxLength={field.maxLength}
+          placeholder={translate(field.label)}
+          defaultValue={field.defaultValue}
+          isUpdateForm={true}
+        />
+      );
+    } else {
+      inputNode = customFormItem || renderComponent;
+    }
+
+    const capitalizeFirstLetter = (str) => {
+      if (!str) return '';
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    };
+
+    return (
+      <div
+        key={field.name}
+        style={{
+          display: 'flex',
+          padding: '10px 0',
+          fontSize: '13.5px',
+          alignItems: 'flex-start',
+          lineHeight: '1.5',
+          borderBottom: isLast ? 'none' : '1px solid #f3f4f6',
+        }}
+      >
+        <div
+          style={{
+            width: '100px',
+            color: '#6b7280',
+            flexShrink: 0,
+            fontWeight: 400,
+            paddingTop: '1px',
+          }}
+        >
+          {capitalizeFirstLetter(translate(field.label))}
+        </div>
+        <div style={{ flexGrow: 1, minWidth: 0, overflow: 'hidden' }}>
+          <Form.Item
+            name={field.name}
+            noStyle
+            rules={[
+              {
+                required: field.required || false,
+                type: filedType[field.type] ?? 'any',
+              },
+            ]}
+            valuePropName={field.type === 'boolean' ? 'checked' : 'value'}
+          >
+            {inputNode}
+          </Form.Item>
+        </div>
+      </div>
+    );
   }
 
   if (customFormItem) return <>{customFormItem}</>;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCrudContext } from '@/context/crud';
 import { Drawer } from 'antd';
 import CollapseBox from '../CollapseBox';
@@ -12,6 +12,7 @@ export default function SidePanel({ config, topContent, bottomContent, fixHeader
   const { panel } = crudContextAction;
   const [opacitySider, setOpacitySider] = useState(0);
   const [paddingTopSider, setPaddingTopSider] = useState('20px');
+  const drawerContentRef = useRef(null);
 
   const { result: currentItem } = useSelector(selectCurrentItem);
   const [title, setTitle] = useState(config.PANEL_TITLE);
@@ -44,6 +45,26 @@ export default function SidePanel({ config, topContent, bottomContent, fixHeader
     };
   }, [isPanelClose]);
 
+  useEffect(() => {
+    if (!isPanelClose) {
+      const resetScroll = () => {
+        if (drawerContentRef.current) {
+          const scrollParent = drawerContentRef.current.closest('.ant-drawer-body');
+          if (scrollParent) {
+            scrollParent.scrollTop = 0;
+          }
+        }
+      };
+
+      // Reset immediately (e.g. for switching users when drawer is already open)
+      resetScroll();
+
+      // Reset after drawer open transition (200ms) to override browser focus/scroll restoration
+      const timer = setTimeout(resetScroll, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [isPanelClose, currentItem]);
+
   const collapsePanel = () => {
     panel.collapse();
   };
@@ -73,6 +94,7 @@ export default function SidePanel({ config, topContent, bottomContent, fixHeader
       width={450}
     >
       <div
+        ref={drawerContentRef}
         className="sidePanelContent"
         style={{
           opacity: opacitySider,
