@@ -89,7 +89,7 @@ function MatrixView({ missions, onSelect }) {
 
 export default function MissionBoard({ missions, layout, onSelect }) {
   if (!missions?.length) {
-    return <div style={{ padding: '60px 0', textAlign: 'center' }}><Empty description="No active missions" /></div>;
+    return <div style={{ padding: '60px 0', textAlign: 'center' }}><Empty description="No active tasks" /></div>;
   }
   return layout === 'matrix'
     ? <MatrixView missions={missions} onSelect={onSelect} />
