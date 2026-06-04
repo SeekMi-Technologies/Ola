@@ -138,7 +138,9 @@ const file_transcribe = {
       // being stuck in an eternal "processing" state.
       try {
         await JobModel.findByIdAndUpdate(job._id, { status: 'failed', error: err.message });
-      } catch (_) { /* best-effort */ }
+      } catch (_) {
+        console.error('[file.transcribe] failed to mark job as failed:', _.message);
+      }
     });
 
     return {
