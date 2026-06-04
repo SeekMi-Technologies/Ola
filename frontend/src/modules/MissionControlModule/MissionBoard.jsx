@@ -33,7 +33,7 @@ function PipelineView({ missions, onSelect }) {
             </div>
             <div className="mc-col-body">
               {items.length === 0
-                ? <div className="mc-col-empty">No active items</div>
+                ? <div className="mc-col-empty">No active tasks</div>
                 : items.map((m) => <MissionCard key={m.id} mission={m} onClick={onSelect} />)
               }
             </div>
@@ -87,10 +87,7 @@ function MatrixView({ missions, onSelect }) {
   );
 }
 
-export default function MissionBoard({ missions, layout, onSelect }) {
-  if (!missions?.length) {
-    return <div style={{ padding: '60px 0', textAlign: 'center' }}><Empty description="No active tasks" /></div>;
-  }
+export default function MissionBoard({ missions = [], layout, onSelect }) {
   return layout === 'matrix'
     ? <MatrixView missions={missions} onSelect={onSelect} />
     : <PipelineView missions={missions} onSelect={onSelect} />;
