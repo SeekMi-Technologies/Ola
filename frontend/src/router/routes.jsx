@@ -7,6 +7,7 @@ const NotFound = lazy(() => import('@/pages/NotFound.jsx'));
 
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const AskOla = lazy(() => import('@/pages/AskOla'));
+const MissionControl = lazy(() => import('@/pages/MissionControl'));
 const FilePage = lazy(() => import('@/pages/File'));
 const Integrations = lazy(() => import('@/pages/Integrations'));
 const Customer = lazy(() => import('@/pages/Customer'));
@@ -73,6 +74,10 @@ let routes = {
     {
       path: '/askola',
       element: <AskOla />,
+    },
+    {
+      path: '/control',
+      element: <MissionControl />,
     },
     {
       path: '/file',
