@@ -13,7 +13,7 @@ export const fields = {
     type: 'string',
     required: true,
     label: 'Description (EN)',
-    message: 'Please enter Description (en)',
+    message: 'Please enter Description (En)',
   },
   description_cn: {
     type: 'string',

@@ -854,7 +854,7 @@ const lang = {
   note_source_agent: '智能体',
   note_source_system: '系统',
   'Please enter Serial Number': '请输入序列号',
-  'Please enter Description (en)': '请输入英文描述',
+  'Please enter Description (En)': '请输入英文描述',
   'Please enter Unit (En)': '请输入英文单位',
 };
 
