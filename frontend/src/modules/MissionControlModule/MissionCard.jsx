@@ -13,10 +13,10 @@ const CHANNEL_ICON = {
 
 // Agent state → a single dot color; no text label on the card (keep cards minimal)
 const STATE_DOT = {
-  processing: '#1677ff',
-  awaiting_approval: '#faad14',
-  idle: '#d9d9d9',
-  done: '#52c41a',
+  processing: '#1890ff',
+  awaiting_approval: '#ffa940',
+  idle: '#595959',
+  done: '#95de64',
 };
 
 export default function MissionCard({ mission, onClick }) {

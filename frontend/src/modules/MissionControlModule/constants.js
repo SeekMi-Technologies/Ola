@@ -9,11 +9,11 @@
 // `won` is shown as the terminal column; `lost` is a terminal state too but is
 // filtered out of the default board (surfaced via a filter later).
 export const STAGES = [
-  { key: 'inquiry', label: 'Lead Inquiry', short: 'Inquiry', color: '#1668dc' },
-  { key: 'negotiation', label: 'Negotiation', short: 'Negotiation', color: '#13a8a8' },
-  { key: 'quote_drafting', label: 'Quote Drafting', short: 'Drafting', color: '#d89614' },
-  { key: 'quote_finalization', label: 'Quote Finalization', short: 'Finalizing', color: '#642ab5' },
-  { key: 'won', label: 'Won', short: 'Won', color: '#52c41a' },
+  { key: 'inquiry', label: 'Lead Inquiry', short: 'Inquiry', color: '#1890ff' },
+  { key: 'negotiation', label: 'Negotiation', short: 'Negotiation', color: '#13c2c2' },
+  { key: 'quote_drafting', label: 'Quote Drafting', short: 'Drafting', color: '#722ed1' },
+  { key: 'quote_finalization', label: 'Quote Finalization', short: 'Finalizing', color: '#ffa940' },
+  { key: 'won', label: 'Won', short: 'Won', color: '#95de64' },
 ];
 
 export const STAGE_MAP = Object.fromEntries(STAGES.map((s) => [s.key, s]));
@@ -24,10 +24,10 @@ export function stageIndex(key) {
 
 // ── Agent execution state (Palantir's Processing / Approval / Completed) ──────
 export const AGENT_STATES = {
-  processing: { key: 'processing', label: 'Processing', color: '#3b82f6' },
-  awaiting_approval: { key: 'awaiting_approval', label: 'Awaiting Approval', color: '#faad14' },
-  idle: { key: 'idle', label: 'Idle', color: '#7b88a0' },
-  done: { key: 'done', label: 'Completed', color: '#52c41a' },
+  processing: { key: 'processing', label: 'Processing', color: '#1890ff' },
+  awaiting_approval: { key: 'awaiting_approval', label: 'Awaiting Approval', color: '#ffa940' },
+  idle: { key: 'idle', label: 'Idle', color: '#595959' },
+  done: { key: 'done', label: 'Completed', color: '#95de64' },
 };
 
 // The 3 status columns of the Palantir-style matrix view. `idle` folds into
