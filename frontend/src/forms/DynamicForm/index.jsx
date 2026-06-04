@@ -724,7 +724,7 @@ function FormElement({ field, feedback, setFeedback, isUpdateForm = false, idx =
       >
         <div
           style={{
-            width: '100px',
+            width: '160px',
             color: '#4b5563',
             flexShrink: 0,
             fontWeight: 500,

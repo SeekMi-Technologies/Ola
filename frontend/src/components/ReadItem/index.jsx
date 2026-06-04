@@ -69,7 +69,7 @@ export default function ReadItem({ config }) {
         column={1}
         size="small"
         labelStyle={{
-          width: '110px',
+          width: '160px',
           color: '#4b5563',
           fontWeight: 500,
           backgroundColor: '#fafafa',
