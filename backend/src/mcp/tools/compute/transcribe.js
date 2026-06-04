@@ -117,7 +117,7 @@ const file_transcribe = {
     let job;
     try {
       job = await JobModel.create({
-        createdBy: fileDoc.createdBy,
+        createdBy: actingAdmin._id,
         type: 'transcription',
         refModel: 'File',
         refId: fileDoc._id,
@@ -132,8 +132,13 @@ const file_transcribe = {
     }
 
     // 5. Kick off the worker (async — does not block the MCP response)
-    runTranscription(fileDoc, job).catch((err) => {
+    runTranscription(fileDoc, job).catch(async (err) => {
       console.error(`[file.transcribe] worker failed for File ${fileDoc._id}:`, err.message);
+      // Mark the job as failed so future calls can re-transcribe instead of
+      // being stuck in an eternal "processing" state.
+      try {
+        await JobModel.findByIdAndUpdate(job._id, { status: 'failed', error: err.message });
+      } catch (_) { /* best-effort */ }
     });
 
     return {
