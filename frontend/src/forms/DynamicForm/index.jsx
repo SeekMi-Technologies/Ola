@@ -508,53 +508,216 @@ function FormElement({ field, feedback, setFeedback, isUpdateForm = false, idx =
   }
 
   if (isUpdateForm) {
-    const isLast = idx === total - 1;
-    let inputNode;
-
-    if (field.type === 'country') {
-      inputNode = <AutoWidthCountrySelect translate={translate} isUpdateForm={true} />;
-    } else if (field.type === 'string' || field.type === 'email' || field.type === 'phone') {
-      inputNode = (
-        <AutoWidthInput
-          autoComplete="off"
-          maxLength={field.maxLength}
-          placeholder={translate(field.label)}
-          defaultValue={field.defaultValue}
-          isUpdateForm={true}
-        />
-      );
-    } else if (field.type === 'number') {
-      inputNode = (
-        <InputNumber
-          variant="borderless"
-          placeholder={translate(field.label)}
-          style={{
-            width: 'calc(100% + 11px)',
-            marginLeft: '-11px',
-            color: '#1f2937',
-            fontWeight: 500,
-            fontSize: '13.5px',
-            background: 'transparent',
-          }}
-        />
-      );
-    } else {
-      inputNode = customFormItem || renderComponent;
-    }
-
     const capitalizeFirstLetter = (str) => {
       if (!str) return '';
       return str.charAt(0).toUpperCase() + str.slice(1);
     };
+
+    const getInputNode = () => {
+      switch (field.type) {
+        case 'country':
+          return (
+            <Select
+              showSearch
+              optionFilterProp="children"
+              filterOption={(input, option) =>
+                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              filterSort={(optionA, optionB) =>
+                (optionA?.label ?? '').toLowerCase().startsWith((optionB?.label ?? '').toLowerCase())
+              }
+              style={{ width: '100%' }}
+            >
+              {countryList.map((country) => (
+                <Select.Option
+                  key={country.value}
+                  value={country.value}
+                  label={translate(country.label)}
+                >
+                  {country?.icon && country?.icon + ' '}
+                  {translate(country.label)}
+                </Select.Option>
+              ))}
+            </Select>
+          );
+        case 'select':
+          return (
+            <Select
+              showSearch={field.showSearch}
+              defaultValue={field.defaultValue}
+              style={{ width: '100%' }}
+            >
+              {field.options?.map((option) => (
+                <Select.Option key={`${uniqueId()}`} value={option.value}>
+                  {option.label}
+                </Select.Option>
+              ))}
+            </Select>
+          );
+        case 'selectWithTranslation':
+          return (
+            <Select
+              defaultValue={field.defaultValue}
+              style={{ width: '100%' }}
+            >
+              {field.options?.map((option) => (
+                <Select.Option key={`${uniqueId()}`} value={option.value}>
+                  <Tag bordered={false} color={option.color}>
+                    {translate(option.label)}
+                  </Tag>
+                </Select.Option>
+              ))}
+            </Select>
+          );
+        case 'selectWithFeedback':
+          return (
+            <Select
+              onSelect={(value) => setFeedback(value)}
+              value={feedback}
+              style={{ width: '100%' }}
+            >
+              {field.options?.map((option) => (
+                <Select.Option key={`${uniqueId()}`} value={option.value}>
+                  {translate(option.label)}
+                </Select.Option>
+              ))}
+            </Select>
+          );
+        case 'color':
+          return (
+            <Select
+              showSearch
+              defaultValue={field.defaultValue}
+              filterOption={(input, option) =>
+                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              filterSort={(optionA, optionB) =>
+                (optionA?.label ?? '').toLowerCase().startsWith((optionB?.label ?? '').toLowerCase())
+              }
+              style={{ width: '100%' }}
+            >
+              {field.options?.map((option) => (
+                <Select.Option key={`${uniqueId()}`} value={option.value} label={option.label}>
+                  <Tag bordered={false} color={option.color}>
+                    {option.label}
+                  </Tag>
+                </Select.Option>
+              ))}
+            </Select>
+          );
+        case 'tag':
+          return (
+            <Select
+              defaultValue={field.defaultValue}
+              style={{ width: '100%' }}
+            >
+              {field.options?.map((option) => (
+                <Select.Option key={`${uniqueId()}`} value={option.value}>
+                  <Tag bordered={false} color={option.color}>
+                    {translate(option.label)}
+                  </Tag>
+                </Select.Option>
+              ))}
+            </Select>
+          );
+        case 'array':
+          return (
+            <Select
+              mode="multiple"
+              defaultValue={field.defaultValue}
+              style={{ width: '100%' }}
+            >
+              {field.options?.map((option) => (
+                <Select.Option key={`${uniqueId()}`} value={option.value}>
+                  {option.label}
+                </Select.Option>
+              ))}
+            </Select>
+          );
+        case 'search':
+          return (
+            <AutoCompleteAsync
+              entity={field.entity}
+              displayLabels={field.displayLabels}
+              searchFields={field.searchFields}
+              outputValue={field.outputValue}
+              withRedirect={field.withRedirect}
+              urlToRedirect={field.urlToRedirect}
+              redirectLabel={field.redirectLabel}
+            />
+          );
+        case 'url':
+          return <Input addonBefore="http://" autoComplete="off" placeholder="www.example.com" style={{ width: '100%' }} />;
+        case 'textarea':
+          return <TextArea rows={4} style={{ width: '100%' }} />;
+        case 'email':
+          return <Input autoComplete="off" placeholder="email@example.com" style={{ width: '100%' }} />;
+        case 'number':
+          return <InputNumber placeholder={translate(field.label)} style={{ width: '100%' }} />;
+        case 'phone':
+          return <Input autoComplete="off" placeholder="+1 123 456 789" style={{ width: '100%' }} />;
+        case 'boolean':
+          return (
+            <Switch
+              checkedChildren={<CheckOutlined />}
+              unCheckedChildren={<CloseOutlined />}
+              defaultValue={true}
+            />
+          );
+        case 'date':
+          return (
+            <DatePicker
+              placeholder={translate('select_date')}
+              style={{ width: '100%' }}
+              format={dateFormat}
+            />
+          );
+        case 'async':
+          return (
+            <SelectAsync
+              entity={field.entity}
+              displayLabels={field.displayLabels}
+              outputValue={field.outputValue}
+              loadDefault={field.loadDefault}
+              withRedirect={field.withRedirect}
+              urlToRedirect={field.urlToRedirect}
+              redirectLabel={field.redirectLabel}
+            />
+          );
+        case 'currency':
+          return (
+            <InputNumber
+              className="moneyInput"
+              min={0}
+              controls={false}
+              addonAfter={money.currency_position === 'after' ? money.currency_symbol : undefined}
+              addonBefore={money.currency_position === 'before' ? money.currency_symbol : undefined}
+              style={{ width: '100%' }}
+            />
+          );
+        case 'string':
+        default:
+          return (
+            <Input
+              autoComplete="off"
+              maxLength={field.maxLength}
+              placeholder={translate(field.label)}
+              style={{ width: '100%' }}
+            />
+          );
+      }
+    };
+
+    const isLast = idx === total - 1;
 
     return (
       <div
         key={field.name}
         style={{
           display: 'flex',
-          padding: '10px 0',
-          fontSize: '13.5px',
-          alignItems: 'flex-start',
+          padding: '6px 0',
+          fontSize: '13px',
+          alignItems: 'center',
           lineHeight: '1.5',
           borderBottom: isLast ? 'none' : '1px solid #f3f4f6',
         }}
@@ -562,10 +725,9 @@ function FormElement({ field, feedback, setFeedback, isUpdateForm = false, idx =
         <div
           style={{
             width: '100px',
-            color: '#6b7280',
+            color: '#4b5563',
             flexShrink: 0,
-            fontWeight: 400,
-            paddingTop: '1px',
+            fontWeight: 500,
           }}
         >
           {capitalizeFirstLetter(translate(field.label))}
@@ -573,7 +735,7 @@ function FormElement({ field, feedback, setFeedback, isUpdateForm = false, idx =
             <span style={{ color: '#ff4d4f', marginLeft: '4px' }}>*</span>
           )}
         </div>
-        <div style={{ flexGrow: 1, minWidth: 0, overflow: 'hidden' }}>
+        <div style={{ flexGrow: 1, minWidth: 0 }}>
           <Form.Item
             name={field.name}
             style={{ marginBottom: 0 }}
@@ -586,7 +748,7 @@ function FormElement({ field, feedback, setFeedback, isUpdateForm = false, idx =
             ]}
             valuePropName={field.type === 'boolean' ? 'checked' : 'value'}
           >
-            {inputNode}
+            {getInputNode()}
           </Form.Item>
         </div>
       </div>

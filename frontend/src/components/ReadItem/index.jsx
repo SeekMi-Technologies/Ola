@@ -11,6 +11,7 @@ import { valueByString } from '@/utils/helpers';
 
 import useLanguage from '@/locale/useLanguage';
 import { useDate } from '@/settings';
+import { Descriptions } from 'antd';
 
 export default function ReadItem({ config }) {
   const { dateFormat } = useDate();
@@ -39,7 +40,7 @@ export default function ReadItem({ config }) {
           );
           if (selectedCountry) {
             value = (
-              <span style={{ fontSize: '13.5px', fontWeight: 500 }}>
+              <span style={{ fontSize: '13px', fontWeight: 500 }}>
                 {selectedCountry.icon && selectedCountry.icon + ' '}
                 {translate(selectedCountry.label)}
               </span>
@@ -61,56 +62,40 @@ export default function ReadItem({ config }) {
     return str.charAt(0).toUpperCase() + str.slice(1);
   };
 
-  const itemsList = listState.map((item, idx) => {
-    const isLast = idx === listState.length - 1;
-    return (
-      <div
-        key={item.propsKey}
+  return (
+    <div style={show}>
+      <Descriptions
+        bordered
+        column={1}
+        size="small"
+        labelStyle={{
+          width: '110px',
+          color: '#4b5563',
+          fontWeight: 500,
+          backgroundColor: '#fafafa',
+          padding: '8px 12px',
+        }}
+        contentStyle={{
+          color: '#1f2937',
+          fontWeight: 500,
+          backgroundColor: '#ffffff',
+          padding: '8px 12px',
+          wordBreak: 'break-word',
+        }}
         style={{
-          display: 'flex',
-          padding: '10px 0',
-          fontSize: '13.5px',
-          alignItems: 'baseline',
-          lineHeight: '1.5',
-          borderBottom: isLast ? 'none' : '1px solid #f3f4f6',
+          border: '1px solid #f0f0f0',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          marginBottom: '24px',
+          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
         }}
       >
-        <div
-          style={{
-            width: '100px',
-            color: '#6b7280',
-            flexShrink: 0,
-            fontWeight: 400,
-          }}
-        >
-          {capitalizeFirstLetter(item.label)}
-        </div>
-        <div
-          style={{
-            color: '#1f2937',
-            fontWeight: 500,
-            wordBreak: 'break-word',
-          }}
-        >
-          {item.value || '-'}
-        </div>
-      </div>
-    );
-  });
-
-  return (
-    <div
-      style={{
-        ...show,
-        background: '#f9fafb',
-        border: '1px solid #f3f4f6',
-        borderRadius: '12px',
-        padding: '4px 16px',
-        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
-        marginBottom: '24px',
-      }}
-    >
-      {itemsList}
+        {listState.map((item) => (
+          <Descriptions.Item key={item.propsKey} label={capitalizeFirstLetter(item.label)}>
+            {item.value || '-'}
+          </Descriptions.Item>
+        ))}
+      </Descriptions>
     </div>
   );
 }

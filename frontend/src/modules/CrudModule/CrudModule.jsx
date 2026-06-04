@@ -54,65 +54,70 @@ function SidePanelTopContent({ config, formElements, withUpload, extraReadConten
           paddingBottom: '12px',
         }}
       >
-        <Button
-          onClick={addNewItem}
-          disabled={isEditBoxOpen}
-          type="dashed"
-          icon={<PlusOutlined />}
-          size="small"
-          style={{ borderRadius: '6px', fontSize: '12px' }}
-        >
-          {translate('add_new')}
-        </Button>
-        <Button
-          onClick={editItem}
-          disabled={isEditBoxOpen}
-          type="text"
-          icon={<EditOutlined />}
-          size="small"
-          style={{ borderRadius: '6px', fontSize: '12px', background: '#f3f4f6' }}
-        >
-          {translate('edit')}
-        </Button>
-        <Button
-          onClick={removeItem}
-          disabled={isEditBoxOpen}
-          type="text"
-          danger
-          icon={<DeleteOutlined />}
-          size="small"
-          style={{ borderRadius: '6px', fontSize: '12px', background: '#fef2f2' }}
-        >
-          {translate('remove')}
-        </Button>
-
-        {isEditBoxOpen && (
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+        {!isEditBoxOpen ? (
+          <>
             <Button
-              onClick={() => {
-                document.getElementById('update-form-submit-btn')?.click();
-              }}
-              type="primary"
-              size="small"
-              style={{
-                borderRadius: '6px',
-                fontSize: '12px',
-                background: '#10b981',
-                borderColor: '#10b981',
-              }}
-            >
-              {translate('Save')}
-            </Button>
-            <Button
-              onClick={() => {
-                dispatch(crud.resetAction({ actionType: 'update' }));
-                readBox.open();
-              }}
+              onClick={addNewItem}
+              type="dashed"
+              icon={<PlusOutlined />}
               size="small"
               style={{ borderRadius: '6px', fontSize: '12px' }}
             >
-              {translate('Cancel')}
+              {translate('add_new')}
             </Button>
+            <Button
+              onClick={editItem}
+              type="text"
+              icon={<EditOutlined />}
+              size="small"
+              style={{ borderRadius: '6px', fontSize: '12px', background: '#f3f4f6' }}
+            >
+              {translate('edit')}
+            </Button>
+            <Button
+              onClick={removeItem}
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              size="small"
+              style={{ borderRadius: '6px', fontSize: '12px', background: '#fef2f2' }}
+            >
+              {translate('remove')}
+            </Button>
+          </>
+        ) : (
+          <div style={{ display: 'flex', gap: '8px', width: '100%', alignItems: 'center' }}>
+            <span style={{ fontWeight: 600, fontSize: '13.5px', color: '#374151', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <EditOutlined style={{ color: '#10b981' }} />
+              {translate('edit')}
+            </span>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+              <Button
+                onClick={() => {
+                  document.getElementById('update-form-submit-btn')?.click();
+                }}
+                type="primary"
+                size="small"
+                style={{
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  background: '#10b981',
+                  borderColor: '#10b981',
+                }}
+              >
+                {translate('Save')}
+              </Button>
+              <Button
+                onClick={() => {
+                  dispatch(crud.resetAction({ actionType: 'update' }));
+                  readBox.open();
+                }}
+                size="small"
+                style={{ borderRadius: '6px', fontSize: '12px' }}
+              >
+                {translate('Cancel')}
+              </Button>
+            </div>
           </div>
         )}
       </div>
