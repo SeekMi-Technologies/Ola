@@ -551,7 +551,7 @@ const lang = {
   'Please select an item': '请选择商品',
   'Qty': '数量',
   'Please enter quantity': '请输入数量',
-  'Please enter name': '请输入姓名',
+  'Please enter Name': '请输入姓名',
   'Price (USD)': '价格 (USD)',
   'Please enter price': '请输入价格',
   'Exp (CNY)': '费用 (CNY)',

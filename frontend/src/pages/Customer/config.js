@@ -2,7 +2,7 @@ export const fields = {
   name: {
     type: 'string',
     required: true,
-    message: 'Please enter name',
+    message: 'Please enter Name',
   },
   country: {
     type: 'country',
