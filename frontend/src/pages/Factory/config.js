@@ -4,20 +4,16 @@ export const fields = {
     required: true
   },
   factory_name: {
-    type: 'string',
-    required: true
+    type: 'string'
   },
   location: {
-    type: 'string',
-    required: true
+    type: 'string'
   },
   contact: {
-    type: 'string',
-    required: true
+    type: 'string'
   },
   tel1: {
-    type: 'string',
-    required: true
+    type: 'string'
   },
   tel2: {
     type: 'string'

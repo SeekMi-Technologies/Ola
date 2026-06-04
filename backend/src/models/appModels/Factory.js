@@ -13,20 +13,16 @@ const schema = new mongoose.Schema({
     key: true
   },
   factory_name: {
-    type: String,
-    required: true
+    type: String
   },
   location: {
-    type: String,
-    required: true
+    type: String
   },
   contact: {
-    type: String,
-    required: true
+    type: String
   },
   tel1: {
-    type: String,
-    required: true
+    type: String
   },
   tel2: {
     type: String
