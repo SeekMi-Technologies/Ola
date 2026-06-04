@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { Switch, Tag } from 'antd';
+import { Switch, Tag, Tooltip, Typography } from 'antd';
 import { CloseOutlined, CheckOutlined } from '@ant-design/icons';
 import { countryList } from '@/utils/countryList';
 import { generate as uniqueId } from 'shortid';
@@ -200,12 +200,32 @@ export function dataForTable({ fields, translate, moneyFormatter, dateFormat }) 
     const defaultComponent = {
       title: field.label ? translate(field.label) : translate(key),
       dataIndex: keyIndex,
-      ellipsis: true,
-      onCell: () => ({
-        style: {
-          maxWidth: key === 'name' ? '220px' : key === 'address' ? '250px' : '180px',
-        },
-      }),
+      render: (text) => {
+        if (!text) return '-';
+        const isLongText =
+          key.toLowerCase().includes('serial') ||
+          key.toLowerCase().includes('address') ||
+          text.toString().length > 25;
+
+        if (isLongText) {
+          const isSerialNumber = key.toLowerCase().includes('serial');
+          return (
+            <Tooltip title={text.toString()}>
+              <Typography.Text
+                copyable={isSerialNumber ? { text: text.toString() } : false}
+                style={{
+                  maxWidth: key === 'address' ? '200px' : '150px',
+                  display: 'inline-block',
+                }}
+                ellipsis
+              >
+                {text}
+              </Typography.Text>
+            </Tooltip>
+          );
+        }
+        return text;
+      },
     };
 
     const type = field.type;
