@@ -26,7 +26,7 @@ export default function MissionControlModule() {
     <div className="mc-root">
       <div className="mc-header">
         <div>
-          <Title level={4} style={{ margin: 0 }}>Mission Control</Title>
+          <Title level={4} style={{ margin: 0 }}>Tasks</Title>
           <Text type="secondary" style={{ fontSize: 13 }}>
             Lead-to-Quote tracker · {missions.length} active
           </Text>

@@ -46,7 +46,7 @@ import {
   QuestionCircleOutlined,
   LogoutOutlined,
   RightOutlined,
-  DeploymentUnitOutlined,
+  CheckSquareOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -97,8 +97,8 @@ function Sidebar({ collapsible, isMobile = false }) {
         },
         {
           key: 'control',
-          icon: <DeploymentUnitOutlined />,
-          label: <Link to={'/control'}>{translate('Mission Control')}</Link>,
+          icon: <CheckSquareOutlined />,
+          label: <Link to={'/control'}>{translate('Tasks')}</Link>,
         },
         {
           key: 'file',
