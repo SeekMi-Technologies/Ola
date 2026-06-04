@@ -853,6 +853,9 @@ const lang = {
   note_source_manual: 'Manual',
   note_source_agent: 'Agent',
   note_source_system: 'System',
+  'Please enter Serial Number': 'Please enter Serial Number',
+  'Please enter Description (en)': 'Please enter Description (en)',
+  'Please enter Unit (En)': 'Please enter Unit (En)',
 };
 
 export default lang;

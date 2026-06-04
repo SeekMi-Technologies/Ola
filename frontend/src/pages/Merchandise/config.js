@@ -3,6 +3,7 @@ export const fields = {
     type: 'string',
     required: true,
     label: 'Serial Number',
+    message: 'Please enter Serial Number',
   },
   serialNumberLong: {
     type: 'string',
@@ -12,6 +13,7 @@ export const fields = {
     type: 'string',
     required: true,
     label: 'Description (EN)',
+    message: 'Please enter Description (en)',
   },
   description_cn: {
     type: 'string',
@@ -33,6 +35,7 @@ export const fields = {
     type: 'string',
     required: true,
     label: 'Unit (EN)',
+    message: 'Please enter Unit (En)',
   },
   unit_cn: {
     type: 'string',
