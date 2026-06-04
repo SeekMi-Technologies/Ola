@@ -12,13 +12,28 @@ function PipelineView({ missions, onSelect }) {
         return (
           <div className="mc-col" key={stage.key} style={{ '--stage-color': stage.color }}>
             <div className="mc-col-head">
-              <span className="mc-col-dot" style={{ background: stage.color }} />
-              <span className="mc-col-title">{stage.label}</span>
-              <span className="mc-col-count">{items.length}</span>
+              <Badge
+                color={stage.color}
+                text={
+                  <span className="mc-col-title" style={{ color: '#262626', fontWeight: 600 }}>
+                    {stage.label}
+                  </span>
+                }
+              />
+              <Badge
+                count={items.length}
+                showZero
+                style={{
+                  backgroundColor: '#f0f2f5',
+                  color: '#8c8c8c',
+                  boxShadow: 'none',
+                  fontWeight: 600,
+                }}
+              />
             </div>
             <div className="mc-col-body">
               {items.length === 0
-                ? <div className="mc-col-empty">—</div>
+                ? <div className="mc-col-empty">No active items</div>
                 : items.map((m) => <MissionCard key={m.id} mission={m} onClick={onSelect} />)
               }
             </div>
