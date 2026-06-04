@@ -828,6 +828,20 @@ const lang = {
   integration_desc_sentry: 'Track frontend and backend errors.',
   integration_desc_vercel: 'Deploy previews and production builds.',
   integration_desc_whatsapp: 'Chat with customers via WhatsApp Business.',
+  whatsapp_status_disconnected: 'Not connected',
+  whatsapp_status_connecting: 'Connecting…',
+  whatsapp_status_connected: 'Connected',
+  whatsapp_status_logged_out: 'Device logged out, please scan again',
+  whatsapp_gateway_unavailable: 'WhatsApp gateway is temporarily unavailable. Please contact your administrator.',
+  whatsapp_connect_failed: 'Failed to connect WhatsApp. Please try again later.',
+  whatsapp_disconnect_confirm: 'Disconnect WhatsApp?',
+  whatsapp_disconnect: 'Disconnect',
+  whatsapp_generating_qr: 'Generating QR code…',
+  whatsapp_modal_title: 'Connect a WhatsApp account',
+  whatsapp_step_1: 'Open WhatsApp on your phone',
+  whatsapp_step_2: 'Tap "Settings", then select "Linked Devices"',
+  whatsapp_step_3: 'Tap "Link a new device"',
+  whatsapp_step_4: 'Point your phone at this screen to scan the QR code',
 };
 
 export default lang;
