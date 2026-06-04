@@ -91,7 +91,7 @@ export default function SidePanel({ config, topContent, bottomContent, fixHeader
       placement="right"
       onClose={collapsePanel}
       open={!isPanelClose}
-      width={450}
+      width={560}
     >
       <div
         ref={drawerContentRef}
