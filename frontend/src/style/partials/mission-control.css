@@ -187,18 +187,14 @@
   transform: translateY(-1px);
 }
 
-/* Amber banner — only colored element on urgent cards */
-.mc-card-banner {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: -12px -12px 10px;
-  padding: 6px 12px;
-  background: #fffbe6;
-  border-bottom: 1px solid #ffe58f;
-  color: #d48806;
-  font-size: 11px;
-  font-weight: 600;
+.mc-card--urgent {
+  border-color: #ffe58f;
+  background: #fffdf6;
+}
+
+.mc-card--urgent:hover {
+  border-color: #ffd591;
+  box-shadow: 0 4px 12px rgba(250, 173, 20, 0.08);
 }
 
 .mc-card-head {

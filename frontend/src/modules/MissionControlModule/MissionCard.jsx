@@ -35,14 +35,6 @@ export default function MissionCard({ mission, onClick }) {
       tabIndex={0}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onClick?.(mission)}
     >
-      {/* Urgent banner — the only non-neutral color element on a card */}
-      {needsAction && (
-        <div className="mc-card-banner">
-          <ThunderboltOutlined />
-          <span>Action Required · {mission.pendingActionCount}</span>
-        </div>
-      )}
-
       {/* Row 1: channel + client + state dot */}
       <div className="mc-card-head">
         {/* Channel icon — neutral gray, tooltip shows the channel name */}
@@ -52,6 +44,13 @@ export default function MissionCard({ mission, onClick }) {
           </span>
         </Tooltip>
         <span className="mc-card-client">{mission.client.name}</span>
+        
+        {needsAction && (
+          <Tooltip title={`Action Required: ${mission.pendingActionCount}`} placement="top">
+            <ThunderboltOutlined style={{ color: '#faad14', fontSize: '13px', marginRight: '2px', flex: 'none' }} />
+          </Tooltip>
+        )}
+
         {/* State dot only — label visible on hover / in drawer */}
         <Tooltip title={agent?.label} placement="top">
           <span className="mc-card-state-dot" style={{ background: STATE_DOT[mission.agentState] }} />
