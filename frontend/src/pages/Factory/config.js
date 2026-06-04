@@ -1,7 +1,8 @@
 export const fields = {
   factory_code: {
     type: 'string',
-    required: true
+    required: true,
+    message: 'Please enter Factory Code'
   },
   factory_name: {
     type: 'string'

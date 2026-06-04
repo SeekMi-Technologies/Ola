@@ -856,6 +856,7 @@ const lang = {
   'Please enter Serial Number': 'Please enter Serial Number',
   'Please enter Description (En)': 'Please enter Description (En)',
   'Please enter Unit (En)': 'Please enter Unit (En)',
+  'Please enter Factory Code': 'Please enter Factory Code',
 };
 
 export default lang;

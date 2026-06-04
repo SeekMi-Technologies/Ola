@@ -856,6 +856,7 @@ const lang = {
   'Please enter Serial Number': '请输入序列号',
   'Please enter Description (En)': '请输入英文描述',
   'Please enter Unit (En)': '请输入英文单位',
+  'Please enter Factory Code': '请输入工厂代码',
 };
 
 export default lang;
