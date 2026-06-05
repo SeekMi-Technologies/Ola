@@ -118,7 +118,7 @@ Tools live in `crud/` and `compute/` subdirectories. The registry (`registry.js`
 **WhatsApp voice transcription** (nanobot side):
 - Bridge (`nanobot/bridge/src/whatsapp.ts`) detects voice messages (audio/ogg + ptt), downloads audio to temp dir
 - Channel (`nanobot/nanobot/channels/whatsapp.py`) calls Whisper API (Groq/OpenAI) to transcribe, passes text to agent
-- Config via `nanobot.config.json`: `whatsapp.transcription.provider`, `whatsapp.transcription.api_key`, `whatsapp.transcription.api_base`, `whatsapp.transcription.language`
+- Config via `nanobot.config.json`: `channels.transcription_provider` (top-level under channels), `channels.transcription_language`; API key resolved from `providers.<provider>.apiKey` (e.g. `providers.openai.apiKey`)
 - When working across both repos, state which side a change goes in **before** editing. A change in `../nanobot/` is not bound by Ola CRM's Node/Mongoose conventions but is bound by the same SDD discipline and "no silent errors" rule.
 
 ## Project

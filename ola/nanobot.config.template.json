@@ -16,6 +16,8 @@
     "sendProgress": true,
     "sendToolHints": false,
     "sendMaxRetries": 3,
+    "transcription_provider": "openai",
+    "transcription_language": null,
     "dingtalk": {
       "enabled": false,
       "clientId": "",
@@ -176,7 +178,7 @@
       "extraHeaders": null
     },
     "openai": {
-      "apiKey": "",
+      "apiKey": "${OPENAI_API_KEY}",
       "apiBase": null,
       "extraHeaders": null
     },
