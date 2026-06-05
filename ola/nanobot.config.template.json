@@ -301,6 +301,7 @@
       "pathAppend": ""
     },
     "restrictToWorkspace": true,
+    "mcpOnly": true,
     "mcpServers": {
       "ola_crm": {
         "type": "streamableHttp",
