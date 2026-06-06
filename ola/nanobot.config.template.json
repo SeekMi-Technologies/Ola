@@ -158,7 +158,9 @@
       "bridgeUrl": "ws://localhost:3001",
       "bridgeToken": "",
       "allowFrom": ["*"],
-      "groupPolicy": "open"
+      "groupPolicy": "open",
+      "crmUploadUrl": "http://127.0.0.1:8889",
+      "crmServiceToken": "${MCP_SERVICE_TOKEN}"
     }
   },
   "providers": {

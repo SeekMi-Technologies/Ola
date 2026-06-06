@@ -213,6 +213,129 @@ async function main() {
   app.get('/mcp', methodNotAllowed);
   app.delete('/mcp', methodNotAllowed);
 
+  // ── POST /internal/upload-audio ──────────────────────────────────────
+  // Internal endpoint for nanobot WhatsApp channel to upload inbound audio
+  // into CRM File storage + trigger auto-transcription. Auth: Bearer token
+  // (same MCP_SERVICE_TOKEN) + X-Acting-As for admin identity.
+  // Reuses fileController/upload.js logic (dedup, disk write, auto-Job).
+  const multer = require('multer');
+  const crypto = require('crypto');
+  const fs = require('fs').promises;
+  const path = require('path');
+  const { v4: uuidv4 } = require('uuid');
+  const { UPLOADS_DIR, resolveUploadPath } = require('@/utils/uploadsPath');
+  const mongoose = require('mongoose');
+  const runTranscription = require('@/jobs/transcriptionWorker');
+
+  const internalMulter = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB for audio
+  }).single('file');
+
+  app.post(
+    '/internal/upload-audio',
+    requireAuth,
+    (req, res, next) => {
+      // Resolve acting admin from X-Acting-As header
+      const actingAs = req.headers['x-acting-as'];
+      if (!actingAs) {
+        return res.status(400).json({ ok: false, code: 'VALIDATION', message: 'X-Acting-As header required' });
+      }
+      const Admin = mongoose.model('Admin');
+      Admin.findById(actingAs)
+        .then((admin) => {
+          if (!admin) {
+            return res.status(404).json({ ok: false, code: 'NOT_FOUND', message: `Admin ${actingAs} not found` });
+          }
+          req.admin = admin;
+          next();
+        })
+        .catch(next);
+    },
+    (req, res, next) => {
+      internalMulter(req, res, (err) => {
+        if (err) return res.status(400).json({ ok: false, code: 'VALIDATION', message: err.message });
+        next();
+      });
+    },
+    async (req, res) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({ ok: false, code: 'VALIDATION', message: 'Missing file field' });
+        }
+
+        const FileModel = mongoose.model('File');
+        const JobModel = mongoose.model('Job');
+
+        // Dedup by content hash per admin
+        const contentHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
+        const existing = await FileModel.findOne({ createdBy: req.admin._id, contentHash, removed: false });
+        if (existing) {
+          return res.status(200).json({
+            ok: true,
+            fileId: existing._id,
+            originalName: existing.originalName,
+            transcriptionJobId: existing.transcriptionJobId,
+            deduped: true,
+          });
+        }
+
+        // Write to disk
+        const adminId = req.admin._id.toString();
+        const now = new Date();
+        const yyyy = String(now.getFullYear());
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const ext = path.extname(req.file.originalname || '.ogg').toLowerCase().slice(0, 9) || '.ogg';
+        const uniqueName = `${uuidv4()}${ext}`;
+        const relativeSourcePath = path.join(adminId, yyyy, mm, uniqueName);
+        const absoluteSourcePath = resolveUploadPath(relativeSourcePath);
+        await fs.mkdir(path.dirname(absoluteSourcePath), { recursive: true });
+        await fs.writeFile(absoluteSourcePath, req.file.buffer);
+
+        // Create File doc
+        const fileDoc = await FileModel.create({
+          createdBy: req.admin._id,
+          originalName: req.file.originalname || `whatsapp_audio_${Date.now()}${ext}`,
+          mimeType: req.file.mimetype || 'audio/ogg',
+          sizeBytes: req.file.size,
+          sourcePath: relativeSourcePath,
+          contentHash,
+        });
+
+        // Auto-trigger transcription for audio files
+        let transcriptionJobId = null;
+        const mime = req.file.mimetype || 'audio/ogg';
+        if (mime.startsWith('audio/') || mime.startsWith('video/')) {
+          const job = await JobModel.create({
+            createdBy: req.admin._id,
+            type: 'transcription',
+            refModel: 'File',
+            refId: fileDoc._id,
+          });
+          await FileModel.findByIdAndUpdate(fileDoc._id, { transcriptionJobId: job._id });
+          transcriptionJobId = job._id;
+          runTranscription(fileDoc, job).catch((err) => {
+            console.error(`[internal/upload-audio] transcription worker failed for File ${fileDoc._id}:`, err.message);
+          });
+        }
+
+        console.log(`[internal/upload-audio] ${fileDoc._id} uploaded for admin ${adminId} (${req.file.size} bytes)`);
+        return res.status(200).json({
+          ok: true,
+          fileId: fileDoc._id,
+          originalName: fileDoc.originalName,
+          sizeBytes: fileDoc.sizeBytes,
+          mimeType: fileDoc.mimeType,
+          transcriptionJobId,
+          deduped: false,
+        });
+      } catch (err) {
+        console.error('[internal/upload-audio] error:', err);
+        return res.status(500).json({ ok: false, code: 'INTERNAL', message: err.message });
+      }
+    }
+  );
+
   // 全局 Express error handler —— 兜底任何未捕获的同步/异步异常
   // 必须放在所有路由之后，签名 4 个参数 Express 才识别为 error handler
   // eslint-disable-next-line no-unused-vars
