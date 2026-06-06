@@ -271,6 +271,7 @@ async function main() {
         const contentHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
         const existing = await FileModel.findOne({ createdBy: req.admin._id, contentHash, removed: false });
         if (existing) {
+          console.log(`[internal/upload-audio] dedup: ${existing._id} for admin ${req.admin._id} (${req.file.size} bytes)`);
           return res.status(200).json({
             ok: true,
             fileId: existing._id,
