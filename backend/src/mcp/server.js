@@ -24,7 +24,7 @@ const {
 // require('./auth') 会在加载时校验 MCP_SERVICE_TOKEN env，缺失即抛错 → 整进程退出
 const requireAuth = require('./auth');
 const { auditLog, hashInput } = require('./logger');
-const { bootstrap } = require('./bootstrap');
+const { bootstrap, getSystemAdmin } = require('./bootstrap');
 const { runWithContext } = require('./context');
 const { decideActingAdmin } = require('./headerResolver');
 // NOTE: do NOT require('./tools/registry') at top-level — it transitively
@@ -235,22 +235,30 @@ async function main() {
   app.post(
     '/internal/upload-audio',
     requireAuth,
-    (req, res, next) => {
-      // Resolve acting admin from X-Acting-As header
+    async (req, res, next) => {
+      // Resolve acting admin from X-Acting-As header.
+      // Single-tenant fallback: if no X-Acting-As, use system admin (from bootstrap).
       const actingAs = req.headers['x-acting-as'];
-      if (!actingAs) {
-        return res.status(400).json({ ok: false, code: 'VALIDATION', message: 'X-Acting-As header required' });
-      }
       const Admin = mongoose.model('Admin');
-      Admin.findById(actingAs)
-        .then((admin) => {
+      try {
+        if (actingAs) {
+          const admin = await Admin.findById(actingAs);
           if (!admin) {
             return res.status(404).json({ ok: false, code: 'NOT_FOUND', message: `Admin ${actingAs} not found` });
           }
           req.admin = admin;
-          next();
-        })
-        .catch(next);
+        } else {
+          // Single-tenant fallback: use the system admin (first admin, role=system)
+          const bootAdmin = await getSystemAdmin();
+          if (!bootAdmin) {
+            return res.status(401).json({ ok: false, code: 'UNAUTHORIZED', message: 'No system admin found' });
+          }
+          req.admin = bootAdmin;
+        }
+        next();
+      } catch (err) {
+        next(err);
+      }
     },
     (req, res, next) => {
       internalMulter(req, res, (err) => {
