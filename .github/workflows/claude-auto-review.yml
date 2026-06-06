@@ -2,7 +2,7 @@ name: Claude Auto Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, ready_for_review, reopened]
     paths-ignore:
       - "**/*.md"
       - "task.md"
@@ -31,61 +31,156 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
-          use_sticky_comment: true
           prompt: |
-            Auto-review this Ola CRM pull request. Focus on the issues that
-            actually break Ola in production; skip generic style nitpicks.
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Auto-review this Ola pull request. The PR branch is already
+            checked out in the working directory — Read/Grep the surrounding
+            code to confirm a finding before posting it.
+
+            Ola is an AI-native foreign-trade sales platform: a MERN backend
+            plus an MCP tool layer that an AI agent (nanobot) drives across
+            messaging channels (WhatsApp, email), serving a customer-facing
+            AI assistant and a salesperson-facing coach.
+
+            ## Primary goal: prevent bloat — enforce reuse over reinvention
+
+            This codebase is heavily factory- and module-driven, and it is
+            starting to bloat from code that re-implements abstractions that
+            already exist. Your single most important job is to catch net-new
+            code that should instead reuse an established pattern. Before
+            flagging duplication, Grep the repo to confirm the abstraction
+            exists; cite the file the author should have reused.
+
+            Backend architecture you must know:
+            - CRUD factory: controllers/middlewaresControllers/
+              createCRUDController. It generates create/read/update/delete/
+              list/listAll/search/filter/summary against a model.
+            - An entity = a Mongoose model under models/appModels/ plus an
+              OPTIONAL controllers/appControllers/<entity>Controller/index.js
+              that calls createCRUDController('<Model>') and overrides ONLY
+              the methods needing custom logic (see quoteController for the
+              maximal example, clientController for the minimal one).
+            - Routes auto-register: models/utils globs models into routesList,
+              and routes/appRoutes/appApi.js generates the standard route set
+              per entity. Manual routes in appApi.js are ONLY for non-model
+              endpoints (ola, whatsapp, comparison, priceSearch).
+            - MCP tools (mcp/tools/{crud,compute}) wrap existing controllers
+              via adapters/controllerAdapter.runController — they add input
+              validation/massaging, never a second copy of business logic.
+
+            Frontend architecture you must know:
+            - A page = a reusable Module + config + a form. Modules:
+              CrudModule (side-panel CRUD), ErpPanelModule (document flows:
+              line items, totals, PDF, mail — Quote/Invoice/PO/Payment),
+              AdvancedCrudModule. Pages under pages/ only supply
+              entity/dataTableColumns/fields config and dispatch a module.
+            - Entity CRUD state goes through redux crud/erp/advancedCrud
+              slices; context is for UI state only (panel/modal visibility).
+            - All API calls go through request/ (request.create/read/update/
+              delete/list/search/filter). Never raw fetch/axios in a
+              component.
+            - Forms: DynamicForm + a config.js for simple entities; a custom
+              component in forms/ for complex ones; share create/update via
+              the isUpdateForm prop — don't duplicate form bodies.
+            - AntD is the only UI lib. All user-facing strings go through
+              useLanguage()/translate().
+
+            Bloat / reuse violations to flag (block PR):
+            - A hand-rolled controller re-implementing create/read/update/
+              delete/list/search instead of createCRUDController — reject
+              unless it documents why the factory cannot serve it.
+            - A manual /<entity>/* route added to appApi.js for a model that
+              would auto-register.
+            - Duplicating logic that already exists once — item subtotal
+              computation, currency/exchange-rate validation, PDF-id
+              assignment, or the Joi item schema are already repeated across
+              quoteController/invoiceController/purchaseOrderController; a new
+              copy must instead extract/use a shared helper.
+            - An MCP tool that reimplements controller logic rather than
+              wrapping it via runController.
+            - A frontend page that hand-rolls a Table + useState CRUD instead
+              of composing CrudModule/ErpPanelModule.
+            - Entity CRUD via local useState or bespoke axios instead of the
+              redux slices + request/ (known anti-pattern: raw axios in
+              pages/File/TranscriptDrawer.jsx — do not copy it).
+            - A new form built inline in a page instead of DynamicForm or a
+              forms/ component; duplicated create vs update form bodies.
+            - A non-AntD UI dependency, or a new Button/Modal/Input wrapper
+              when AntD + existing components suffice.
+            - Hardcoded user-facing strings instead of translate().
+            - A new npm dependency when an already-present library covers it.
+
+            ## Correctness & safety red lines (block PR)
 
             Multi-admin data isolation (highest priority):
-            - Every business MCP tool call must carry X-Acting-As — never
+            - Every business MCP tool call carries X-Acting-As — never a
               silent fallback to systemAdmin.
-            - Backend controllers must filter by req.admin._id; createdBy on
-              new docs must equal req.admin._id, never a hardcoded id.
-            - Per-identity transports must not collapse across users
-              (no shared session reading a contextvar at request time).
+            - Controllers filter by req.admin._id and set createdBy =
+              req.admin._id (never a hardcoded id); no tool/endpoint returns
+              another admin's data. Per-identity transports must not collapse
+              across users.
 
-            Robustness red lines (block PR):
+            Robustness:
             - No silent catch ({} or `catch(e){}`) — every catch returns a
-              specific error with status code.
-            - No setTimeout pretending to be async, no @ts-ignore /
-              eslint-disable to bypass type/lint failures.
-            - Money math must use helpers.calculate.{multiply,add,sub,mul} —
-              not native + - *.
-            - Soft-delete only (removed:true). Never physical delete on
-              Mongoose docs or drop indexes.
-            - Mongoose Schema must include removed/enabled/createdBy/
-              created/updated when introducing a new entity.
-            - Joi validation at controller entry; reject 400 on bad input
-              with a specific message (no generic 500).
-            - Response shape must be { success, result, message } on both
-              success and failure.
+              specific error with a status code.
+            - No setTimeout pretending to be async; no @ts-ignore /
+              eslint-disable to bypass type or lint failures.
+            - Money math via helpers.calculate.{add,sub,multiply,divide} —
+              never native + - *.
+            - Soft-delete only (removed:true); never physical delete or drop
+              indexes.
+            - Controllers return { success, result, message } on both success
+              and failure; Joi-validate at entry, 400 with a specific message
+              on bad input (no generic 500).
+            - New Mongoose entities include removed/enabled/createdBy/created/
+              updated and the autopopulate plugin.
 
-            Security:
-            - No hardcoded secrets, no eval/exec on user input.
-            - Auth-gated routes wired through adminAuth.isValidAuthToken.
-            - All endpoints behind that middleware unless explicitly public.
+            Database schema changes (treat as high-risk):
+            - Scrutinize every schema/model change — added, removed, renamed,
+              or retyped fields, new required fields without a default or
+              backfill, and any index change. Migrations stay idempotent;
+              never drop a field/index in the same PR that starts writing its
+              replacement.
+            - A frontend-scoped PR (touching only frontend/) must NOT carry
+              backend model/schema changes — flag it as out of scope.
 
-            Frontend:
-            - API calls must go through src/request/ — no raw fetch /
-              XMLHttpRequest.
-            - AntD only — no Material UI / Chakra / Tailwind imports.
-            - Redux through crud / advancedCrud / erp slices, not bespoke
-              local state for entity ops.
+            Agent & channels (customer-facing now):
+            - `channel` is a generic field — never hardcode "whatsapp" as the
+              only source.
+            - No `-preview` or otherwise unpinned LLM model ids in prod config
+              — silent upstream removal has caused live outages.
+            - Don't weaken the channel-facing agent's OLA identity or its
+              prompt-injection defenses.
 
-            Testing:
-            - Mock-only tests of MCP / Anthropic SDK transports are
-              false-positives (Phase ISO 2026-05-06 lesson). If a test
-              mocks streamable_http_client, ClientSession, or
-              session.call_tool, flag it and recommend a real-transport
-              equivalent.
+            Security: no hardcoded secrets, no eval/exec on user input;
+            auth-gated routes behind adminAuth.isValidAuthToken unless
+            explicitly public.
 
-            Comment style:
-            - Be terse. One short paragraph per issue.
-            - Use inline comments on specific lines for code-level issues.
-            - Use the sticky summary comment for cross-cutting findings.
-            - Skip comments on test files, fixtures, .md files, and
-              auto-generated lockfiles.
-            - If the PR looks clean, say so in one sentence — don't pad
-              with generic positives.
+            Product red lines: no emoji in product surfaces (UI copy, agent/
+            chat output, prompts, investor/marketing docs); no Taiwan
+            references anywhere (TW / TWD / 台湾 / Taipei).
+
+            Testing: mock-only tests of MCP/Anthropic SDK transports are
+            false-positives — if a test mocks streamable_http_client,
+            ClientSession, or session.call_tool, flag it and recommend a
+            real-transport equivalent.
+
+            ## How to post the review (keep it to one clean pass)
+            - Post exactly ONE top-level summary with `gh pr comment`. Lead
+              with the bloat/reuse findings, then correctness, then the rest.
+            - Use `mcp__github_inline_comment__create_inline_comment` (with
+              `confirmed: true`) ONLY for the highest-severity violations —
+              at most 6 inline comments total.
+            - Only post GitHub comments. Do NOT submit review text as chat
+              messages and do NOT open a formal PR review.
+            - One short sentence per issue: file:line + what breaks (or what
+              it duplicates) + the fix (name the abstraction to reuse). No
+              Todo lists, checkboxes, progress logs, "Fix this →" deep-links,
+              emoji, restating the diff, or generic praise.
+            - Skip test files, fixtures, .md files, and lockfiles.
+            - If the PR is clean, post a one-sentence summary and stop.
           claude_args: |
-            --max-turns 30
+            --max-turns 25
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Read,Grep,Glob,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr checks:*)"
