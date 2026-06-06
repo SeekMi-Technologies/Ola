@@ -12,7 +12,7 @@ const list = async (req, res) => {
     ? { [sortBy]: Number(sortValue) }
     : { created: -1, _id: -1 };
 
-  const filter = { removed: false };
+  const filter = { removed: false, createdBy: req.admin._id };
   if (q && q.trim()) {
     filter.originalName = { $regex: new RegExp(q.trim(), 'i') };
   }
