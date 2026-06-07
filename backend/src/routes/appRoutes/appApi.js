@@ -67,4 +67,11 @@ router.route('/ola/session/delete/:id').delete(catchErrors(olaController['sessio
 router.route('/ola/session/rename/:id').patch(catchErrors(olaController['sessionRename']));
 router.route('/ola/session/messages/:id').get(catchErrors(olaController['sessionMessages']));
 
+// WhatsApp — CRM proxy to the local Baileys bridge (#326). Not an appModel, so
+// registered here like ola/*; adminAuth + trackActivity already applied at mount.
+const whatsappController = require('@/controllers/appControllers/whatsappController');
+router.route('/whatsapp/login').post(catchErrors(whatsappController['login']));
+router.route('/whatsapp/status').get(catchErrors(whatsappController['status']));
+router.route('/whatsapp').delete(catchErrors(whatsappController['logout']));
+
 module.exports = router;

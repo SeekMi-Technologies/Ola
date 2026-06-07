@@ -46,6 +46,8 @@ export default function DataTable({ config, extra = [] }) {
   const { moneyFormatter } = useMoney();
   const { dateFormat } = useDate();
 
+  const dispatch = useDispatch();
+
   const items = [
     {
       label: translate('Show'),
@@ -138,7 +140,9 @@ export default function DataTable({ config, extra = [] }) {
         >
           <EllipsisOutlined
             style={{ cursor: 'pointer', fontSize: '24px' }}
-            onClick={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
           />
         </Dropdown>
       ),
@@ -148,8 +152,6 @@ export default function DataTable({ config, extra = [] }) {
   const { result: listResult, isLoading: listIsLoading } = useSelector(selectListItems);
 
   const { pagination, items: dataSource } = listResult;
-
-  const dispatch = useDispatch();
 
   const handelDataTableLoad = useCallback((pagination) => {
     const options = { page: pagination.current || 1, items: pagination.pageSize || 10 };
@@ -205,6 +207,10 @@ export default function DataTable({ config, extra = [] }) {
         loading={listIsLoading}
         onChange={handelDataTableLoad}
         scroll={{ x: true }}
+        onRow={(record) => ({
+          onClick: () => handleRead(record),
+          style: { cursor: 'pointer' },
+        })}
       />
     </>
   );

@@ -56,11 +56,12 @@ const ResetPassword = () => {
             </Button>
             {translate('Or')} <a href="/login"> {translate('already have account Login')} </a>
           </Form.Item>
+
         </Form>
       </Loading>
     );
   };
-  return <AuthModule authContent={<FormContainer />} AUTH_TITLE="Reset Password" />;
+  return <AuthModule authContent={<FormContainer />} AUTH_TITLE="reset_password" />;
 };
 
 export default ResetPassword;

@@ -80,7 +80,7 @@ mkdir -p "$HOME/.nanobot"
   require("dotenv").config({ path: path.join(process.argv[2], ".secrets/SERVERS.env") });
   const fs = require("fs"), os = require("os");
   const required = [
-    "MCP_SERVICE_TOKEN", "GEMINI_API_KEY",
+    "MCP_SERVICE_TOKEN", "DEEPSEEK_API_KEY",
     "ZOHO_OLA_EMAIL", "ZOHO_OLA_APP_PASSWORD",
     "ZOHO_IMAP_HOST", "ZOHO_SMTP_HOST",
   ];
@@ -161,6 +161,11 @@ for i in $(seq 1 15); do
   fi
 done
 
+# #273 — macOS system proxy (Clash on 7897) returns 403 for api.deepseek.com.
+# Bypass proxy for DeepSeek so Python urllib connects directly.
+export no_proxy="api.deepseek.com,localhost,127.0.0.1,${no_proxy:-}"
+export NO_PROXY="api.deepseek.com,localhost,127.0.0.1,${NO_PROXY:-}"
+
 # 3. NanoBot — two processes:
 #   serve   (8900) — OpenAI-compat /v1/chat/completions for askola web
 #   gateway (8901) — ChannelManager (email/etc) + cron + heartbeat
@@ -175,10 +180,54 @@ if [ -d "$NANOBOT_DIR" ]; then
   echo -e "${GREEN}[4b/5] Starting NanoBot gateway (port 8901) — channels (email/etc)...${NC}"
   python -m nanobot gateway --port 8901 > /tmp/ola-nanobot-gateway.log 2>&1 &
   NANOBOT_GATEWAY_PID=$!
+
+  # 4c. WhatsApp bridge (single shared, dev-only convenience).
+  #
+  # OS-assigned port (listen(0)) written to ~/.nanobot/wa/bridge.port; nanobot
+  # WhatsAppChannel reads it dynamically. Default dev admin = admin@admin.com
+  # (699245d5...) — multi-dev 同时跑会撞 WA linked device, 接受 ("顶号就顶号").
+  #
+  # NB. ~/.nanobot/wa/<adminId>/auth/ mkdir 在 nanobot 走 file-system scan 阶段
+  # 是必须的; 当 #181 H2' event-driven sync 切上线后这步可以删 (届时 nanobot
+  # 启动调 CRM /api/internal/wa/enabled-admins 拿 list, 不依赖 fs scan).
+  echo -e "${GREEN}[4c/5] Starting WhatsApp bridge — default admin admin@admin.com...${NC}"
+  # Defensive: kill orphan bridge processes from incomplete prior stop-dev. Without
+  # this, multiple bridges share the same per-admin creds.json → WhatsApp replies
+  # status 440 (connectionReplaced) in a 5s reconnect loop. The pattern matches
+  # `node dist/index.js` (bridge process cwd is bridge/, but the command line does
+  # not include "bridge/" — earlier patterns mismatched, accumulating orphans).
+  pkill -f "node dist/index\.js" 2>/dev/null && echo "     Killed orphan bridge(s) from prior session" || true
+  sleep 1
+
+  # Belt-and-suspenders: wipe ALL admin WA auth state every start. Operators
+  # who ctrl+c instead of running stop-dev.sh leave behind stale auth dirs +
+  # portfiles; this guarantees fresh QR scan every start regardless of how
+  # the previous session ended. Default dev admin auth dir re-created below.
+  # Other test admins (e.g. for cross-tenant scenarios) need to be re-mkdir'd
+  # by hand each session.
+  if [ -d "$HOME/.nanobot/wa" ] && [ "$(ls -A "$HOME/.nanobot/wa" 2>/dev/null)" ]; then
+    rm -rf "$HOME/.nanobot/wa"/*
+    echo "     Wiped previous WA state (all admin auth + portfiles cleared)"
+  fi
+
+  if [ ! -f "$NANOBOT_DIR/bridge/dist/index.js" ]; then
+    echo -n "     Building bridge (first run)..."
+    (cd "$NANOBOT_DIR/bridge" && npm install --silent --no-audit --no-fund && npm run build) > /tmp/ola-wa-bridge-build.log 2>&1
+    if [ -f "$NANOBOT_DIR/bridge/dist/index.js" ]; then
+      echo -e " ${GREEN}ok${NC}"
+    else
+      echo -e " ${RED}FAILED${NC} — check /tmp/ola-wa-bridge-build.log"
+    fi
+  fi
+  mkdir -p "$HOME/.nanobot/wa/699245d5c692e668ea7ab155/auth"
+  cd "$NANOBOT_DIR/bridge"
+  AUTH_ROOT="$HOME/.nanobot/wa" nohup node dist/index.js > /tmp/ola-wa-bridge.log 2>&1 &
+  WA_BRIDGE_PID=$!
 else
   echo -e "${YELLOW}[4/5] NanoBot directory not found at $NANOBOT_DIR, skipping${NC}"
   NANOBOT_PID=""
   NANOBOT_GATEWAY_PID=""
+  WA_BRIDGE_PID=""
 fi
 
 # 4. Frontend
@@ -209,12 +258,30 @@ fi
 if [ -n "$NANOBOT_GATEWAY_PID" ]; then
   check_port 8901 "NanoBot gateway " "nanobot-gateway"
 fi
+if [ -n "$WA_BRIDGE_PID" ] && [ -f "$HOME/.nanobot/wa/bridge.port" ]; then
+  BRIDGE_PORT=$(cat "$HOME/.nanobot/wa/bridge.port")
+  if kill -0 "$WA_BRIDGE_PID" 2>/dev/null; then
+    # Default dev admin (admin@admin.com): if creds.json exists, Baileys auto-reconnects
+    # silently; if missing, user needs to scan QR from the bridge log.
+    DEFAULT_ADMIN_AUTH="$HOME/.nanobot/wa/699245d5c692e668ea7ab155/auth/creds.json"
+    if [ -f "$DEFAULT_ADMIN_AUTH" ]; then
+      WA_STATUS_NOTE="admin@admin.com auto-reconnect (creds.json present)"
+    else
+      # QR ASCII is ~30 lines tall — default tail -f shows last 10, truncating
+      # the top. Use -n 100 so the full QR + startup lines are visible at once.
+      WA_STATUS_NOTE="📱 admin@admin.com FIRST scan needed — run: tail -n 100 -f /tmp/ola-wa-bridge.log"
+    fi
+    echo -e "  WA bridge       : ${GREEN}running${NC} (port $BRIDGE_PORT) — $WA_STATUS_NOTE"
+  else
+    echo -e "  WA bridge       : ${RED}FAILED${NC} — check /tmp/ola-wa-bridge.log"
+  fi
+fi
 check_port 3000 "Frontend        " "frontend"
 
 echo ""
-echo "Logs: /tmp/ola-{backend,mcp,nanobot,frontend}.log"
+echo "Logs: /tmp/ola-{backend,mcp,nanobot,nanobot-gateway,wa-bridge,frontend}.log"
 echo "Stop all: bash $CRM_DIR/stop-dev.sh"
 echo ""
 
 # Save PIDs for stop script
-echo "$BACKEND_PID $MCP_PID $NANOBOT_PID $FRONTEND_PID" > /tmp/ola-dev-pids
+echo "$BACKEND_PID $MCP_PID $NANOBOT_PID $NANOBOT_GATEWAY_PID $WA_BRIDGE_PID $FRONTEND_PID" > /tmp/ola-dev-pids

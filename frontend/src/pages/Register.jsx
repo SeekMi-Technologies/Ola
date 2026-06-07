@@ -21,6 +21,7 @@ const RegisterPage = () => {
 
   const onFinish = (values) => {
     const { confirmPassword, ...registerData } = values;
+    navigate('/', { replace: true });
     dispatch(register({ registerData }));
   };
 
@@ -31,7 +32,7 @@ const RegisterPage = () => {
   const FormContainer = () => {
     return (
       <Loading isLoading={isLoading}>
-        <Form
+<Form
           layout="vertical"
           name="register_form"
           className="login-form"
@@ -47,20 +48,20 @@ const RegisterPage = () => {
               loading={isLoading}
               size="large"
             >
-              Sign up
+              {translate('sign_up')}
             </Button>
           </Form.Item>
           
           <div style={{ textAlign: 'center', marginTop: 10 }}>
-            <Text>Already have an account? </Text>
-            <Link to="/login">Log in</Link>
+            <Text>{translate('already_have_an_account')} </Text>
+            <Link to="/login">{translate('login')}</Link>
           </div>
         </Form>
       </Loading>
     );
   };
 
-  return <AuthModule authContent={<FormContainer />} AUTH_TITLE="Sign up" />;
+  return <AuthModule authContent={<FormContainer />} AUTH_TITLE="sign_up" />;
 };
 
 export default RegisterPage;

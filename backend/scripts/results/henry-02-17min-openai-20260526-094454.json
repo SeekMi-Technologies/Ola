@@ -1,0 +1,21 @@
+{
+  "scenario": "henry-02-17min",
+  "audio_file": "/Users/duke/Desktop/henry-02.m4a",
+  "audio_duration_sec": 1089.95,
+  "provider": "openai",
+  "admin_email": "admin@admin.com",
+  "timestamp": "2026-05-26T16:44:54Z",
+  "metrics": {
+    "upload_latency_ms": 1563,
+    "poll_duration_ms": 506250,
+    "total_duration_ms": 507813,
+    "worker_duration_ms": 503590,
+    "sentence_count": 291,
+    "speaker_count": 13,
+    "sidecar_bytes": 20581
+  },
+  "deduped": false,
+  "job_status": "done",
+  "job_error": "",
+  "first_line": "A 00:00  有個八星報,啊沒了,西多士"
+}

@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+jobs:
+  backend:
+    name: Backend (lint + test + audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pre-cache MongoDB binary
+        run: node -e "const{MongoMemoryServer}=require('mongodb-memory-server');MongoMemoryServer.create().then(m=>m.stop()).catch(e=>{console.error(e);process.exit(1)})"
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Unit + integration tests
+        run: npm test -- --maxWorkers=50%
+
+      - name: Security audit (critical prod deps)
+        run: npm audit --audit-level=critical --omit=dev
+
+  frontend:
+    name: Frontend (lint + test + build + audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Security audit (critical prod deps)
+        run: npm audit --audit-level=critical --omit=dev
+
+  docker-build:
+    name: Docker build smoke
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t ola-backend-ci ./backend
+
+      - name: Build frontend image
+        run: docker build -t ola-frontend-ci -f ./frontend/Dockerfile.prod ./frontend
+
+      - name: Stub backend/.env for compose validation
+        run: echo "# CI stub for docker compose config validation" > ./backend/.env
+
+      - name: Validate docker-compose syntax
+        run: docker compose config -q
+        env:
+          MCP_BIND_ADDR: 127.0.0.1

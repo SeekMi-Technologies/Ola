@@ -84,20 +84,23 @@ test('formatParaformerSidecar: empty input → empty string', () => {
 
 // =========== applyOpenCC ===========
 
-test('applyOpenCC: simplified → HK traditional', () => {
+test('applyOpenCC: simplified → HK traditional (whitelist of known conversions)', () => {
   const input = '讲细啲 嗰啲 听 数 实 时 边 见 国 经 网 余';
   const out = applyOpenCC(input);
-  // each simplified char → HK traditional equivalent
-  expect(out).toContain('講');
-  expect(out).toContain('聽');
-  expect(out).toContain('數');
-  expect(out).toContain('實');
-  expect(out).toContain('時');
-  expect(out).toContain('邊');
-  expect(out).toContain('國');
-  expect(out).toContain('經');
-  // and no simplified leakage
-  expect(out).not.toMatch(/[讲听数实时边见国经网余]/);
+  // Whitelist: verify each simplified char we KNOW OpenCC converts.
+  // Not all chars have a 1:1 mapping in HK mode (e.g. Cantonese-specific
+  // 啲/嗰 are already traditional), so we only assert the ones that DO
+  // convert rather than using a blacklist that may break if a char is
+  // legitimately unchanged.
+  const conversions = [
+    ['讲', '講'], ['听', '聽'], ['数', '數'], ['实', '實'],
+    ['时', '時'], ['边', '邊'], ['见', '見'], ['国', '國'],
+    ['经', '經'], ['网', '網'], ['余', '餘'],
+  ];
+  for (const [simplified, traditional] of conversions) {
+    expect(out).toContain(traditional);
+    expect(out).not.toContain(simplified);
+  }
 });
 
 test('applyOpenCC: 繫→係 post-fix (Cantonese 系 quirk)', () => {

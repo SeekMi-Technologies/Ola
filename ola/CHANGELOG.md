@@ -11,7 +11,7 @@ The current version is shown inside the product under **Settings → sidebar foo
 
 ---
 
-## v1.7.0 — 2026-05-20
+## v1.8.0 — 待发布 / Unreleased
 
 **Voice goes into the Lead-to-Quote loop.**
 
@@ -24,6 +24,22 @@ The current version is shown inside the product under **Settings → sidebar foo
 - **把销售通话拖进 Ask Ola。** 在 Ask Ola 输入框上传录音，Ola 后台自动转写并把内容带进对话。可以问「客户最担心什么」「这单怎么 close」，Ola 直接基于真实通话回答。
 - **Files 页统一管所有录音。** `/file` 显示每条录音的转写状态，可以侧拉抽屉看 transcript，也能搜历史通话，不用重传。
 - **每个销售各管各的数据。** 每个销售的对话历史、上传文件、Ola 的记忆都在自己账号范围里 — 团队共用 Ola 也不会串号。
+
+---
+
+## v1.7.0 — 2026-06-06
+
+**WhatsApp becomes a Lead-to-Quote channel.**
+
+- **Connect WhatsApp by scanning a QR code.** Link your WhatsApp from the Integrations page — scan the live QR with your phone and Ola is connected. Check connection status or disconnect anytime from the same page.
+- **Customer inquiries flow straight into Ola.** A message from a customer on WhatsApp now runs the Lead-to-Quote loop — Ola reads it, identifies the products, and helps you move toward a quote, without leaving the chat.
+- **Account-scoped by default.** Every WhatsApp conversation runs in the context of the salesperson who connected it — so a shared Ola never crosses wires between accounts.
+
+**WhatsApp 成为 Lead-to-Quote 的新入口。**
+
+- **扫码接入 WhatsApp。** 在 Integrations 页用手机扫实时二维码，Ola 就连上了。连接状态、断开都在同一页随时操作。
+- **客户询盘直接进 Ola。** 客户在 WhatsApp 发来的消息会跑 Lead-to-Quote 流程——Ola 读消息、认产品、协助你往报价推进，不用切窗口。
+- **每个销售各管各的数据。** 每条 WhatsApp 对话都按接入它的销售身份执行——团队共用 Ola 也不会串号。
 
 ---
 

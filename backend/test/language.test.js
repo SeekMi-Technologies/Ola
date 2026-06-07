@@ -24,8 +24,9 @@ const { globSync } = require('glob');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
 const BACKEND_ROOT = path.join(__dirname, '..');
-// Distinct port from olaController.chat.test (18900) so jest can run them in parallel.
-const FAKE_NANOBOT_PORT = 18901;
+// Distinct port from other fake-NanoBot tests so jest can run them in parallel.
+// Taken: 18900 (olaController.chat), 18901 (llmUsage.chat), 18902 (llmUsage.autotitle).
+const FAKE_NANOBOT_PORT = 18903;
 
 let mongo;
 let fakeNanoBot;
