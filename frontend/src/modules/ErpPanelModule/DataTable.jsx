@@ -173,7 +173,10 @@ export default function DataTable({ config, extra = [] }) {
   };
 
   const handelDataTableLoad = (pagination, _filters, sorter = {}) => {
-    const next = sorter?.order ? { field: toFieldPath(sorter.field), order: sorter.order } : null;
+    // AntD passes an array when multi-column sort is enabled; the backend supports a
+    // single sort key, so honor the highest-priority (first) column.
+    const active = Array.isArray(sorter) ? sorter[0] : sorter;
+    const next = active?.order ? { field: toFieldPath(active.field), order: active.order } : null;
     setSortState(next);
     fetchList(next, { page: pagination?.current || 1, items: pagination?.pageSize || 10 });
   };
