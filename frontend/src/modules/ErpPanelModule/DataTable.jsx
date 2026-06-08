@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   EyeOutlined,
   EditOutlined,
@@ -21,6 +21,14 @@ import { generate as uniqueId } from 'shortid';
 import { useNavigate } from 'react-router-dom';
 
 import { DOWNLOAD_BASE_URL } from '@/config/serverApiConfig';
+
+// Normalize an AntD dataIndex / sorter.field (string or array) to a dot-path ('client.name').
+const toFieldPath = (field) => (Array.isArray(field) ? field.join('.') : field);
+
+// Build backend sort query params from a { field, order } descriptor.
+// No order → empty, so the backend falls back to its default `created` desc.
+const buildSortOptions = (sort) =>
+  sort?.order ? { sortBy: sort.field, sortValue: sort.order === 'ascend' ? 1 : -1 } : {};
 
 function AddNewItem({ config }) {
   const navigate = useNavigate();
@@ -150,47 +158,41 @@ export default function DataTable({ config, extra = [] }) {
     },
   ];
 
-  const buildSortOptions = (sorter) => {
-    if (!sorter?.order) return {}; // 取消排序 → 回退后端默认 created desc
-    const field = Array.isArray(sorter.field) ? sorter.field.join('.') : sorter.field;
-    return { sortBy: field, sortValue: sorter.order === 'ascend' ? 1 : -1 };
+  // Sort is React-controlled so the header arrow and the data order can never diverge.
+  // Seed from the column flagged with defaultSortOrder (e.g. date desc).
+  const defaultSortCol = dataTableColumns.find((c) => c.defaultSortOrder);
+  const [sortState, setSortState] = useState(
+    defaultSortCol
+      ? { field: toFieldPath(defaultSortCol.dataIndex), order: defaultSortCol.defaultSortOrder }
+      : null
+  );
+
+  // Single load path: every fetch carries the current sort, so Refresh / filter / paging stay consistent.
+  const fetchList = (sort, extra = {}) => {
+    dispatch(erp.list({ entity, options: { ...buildSortOptions(sort), ...extra } }));
   };
 
   const handelDataTableLoad = (pagination, _filters, sorter = {}) => {
-    const options = {
-      page: pagination?.current || 1,
-      items: pagination?.pageSize || 10,
-      ...buildSortOptions(sorter),
-    };
-    dispatch(erp.list({ entity, options }));
-  };
-
-  const defaultSortCol = dataTableColumns.find((c) => c.defaultSortOrder);
-
-  const dispatcher = () => {
-    const options = {};
-    if (defaultSortCol) {
-      const field = Array.isArray(defaultSortCol.dataIndex)
-        ? defaultSortCol.dataIndex.join('.')
-        : defaultSortCol.dataIndex;
-      options.sortBy = field;
-      options.sortValue = defaultSortCol.defaultSortOrder === 'ascend' ? 1 : -1;
-    }
-    dispatch(erp.list({ entity, options }));
+    const next = sorter?.order ? { field: toFieldPath(sorter.field), order: sorter.order } : null;
+    setSortState(next);
+    fetchList(next, { page: pagination?.current || 1, items: pagination?.pageSize || 10 });
   };
 
   useEffect(() => {
-    const controller = new AbortController();
-    dispatcher();
-    return () => {
-      controller.abort();
-    };
+    fetchList(sortState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filterTable = (value) => {
-    const options = { equal: value, filter: searchConfig?.entity };
-    dispatch(erp.list({ entity, options }));
+    fetchList(sortState, { equal: value, filter: searchConfig?.entity });
   };
+
+  // Drive each sortable column's arrow from sortState (controlled).
+  const columnsWithSort = dataTableColumns.map((c) =>
+    c.sorter
+      ? { ...c, sortOrder: sortState?.field === toFieldPath(c.dataIndex) ? sortState.order : null }
+      : c
+  );
 
   return (
     <>
@@ -208,7 +210,7 @@ export default function DataTable({ config, extra = [] }) {
             // withRedirect
             // urlToRedirect={'/customer'}
           />,
-          <Button onClick={() => dispatcher()} key={`${uniqueId()}`} icon={<RedoOutlined />}>
+          <Button onClick={() => fetchList(sortState)} key={`${uniqueId()}`} icon={<RedoOutlined />}>
             {translate('Refresh')}
           </Button>,
 
@@ -220,7 +222,7 @@ export default function DataTable({ config, extra = [] }) {
       ></PageHeader>
 
       <Table
-        columns={dataTableColumns}
+        columns={columnsWithSort}
         rowKey={(item) => item._id}
         dataSource={dataSource}
         pagination={pagination}
