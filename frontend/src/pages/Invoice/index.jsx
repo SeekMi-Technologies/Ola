@@ -22,6 +22,7 @@ export default function Invoice() {
     {
       title: translate('Number'),
       dataIndex: 'number',
+      sorter: true,
     },
     {
       title: translate('Client'),
@@ -30,6 +31,8 @@ export default function Invoice() {
     {
       title: translate('Date'),
       dataIndex: 'date',
+      sorter: true,
+      defaultSortOrder: 'descend',
       render: (date) => {
         return dayjs(date).format(dateFormat);
       },
@@ -37,6 +40,7 @@ export default function Invoice() {
     {
       title: translate('expired Date'),
       dataIndex: 'expiredDate',
+      sorter: true,
       render: (date) => {
         return dayjs(date).format(dateFormat);
       },
@@ -44,6 +48,7 @@ export default function Invoice() {
     {
       title: translate('Total'),
       dataIndex: 'total',
+      sorter: true,
       onCell: () => {
         return {
           style: {
@@ -74,6 +79,7 @@ export default function Invoice() {
     {
       title: translate('Status'),
       dataIndex: 'status',
+      sorter: true,
       render: (status) => {
         let tagStatus = tagColor(status);
 
