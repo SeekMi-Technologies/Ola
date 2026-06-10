@@ -1,4 +1,5 @@
 import { Layout, Card } from 'antd';
+import { GlobalOutlined, FileTextOutlined } from '@ant-design/icons';
 import LanguageSelect from '@/components/LanguageSelect';
 import logo from '@/style/images/OLA_LOGO.svg';
 
@@ -63,9 +64,13 @@ export default function AuthLayout({ children }) {
       >
         <span>© 2026 OLA Technologies, Inc.</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <LanguageSelect />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <GlobalOutlined style={{ color: '#9CA3AF', fontSize: '13px' }} />
+            <LanguageSelect />
+          </div>
           <span style={{ color: '#E5E7EB' }}>|</span>
-          <a href="mailto:ola@olatech.ai" style={{ color: '#9CA3AF', textDecoration: 'none' }}>
+          <a href="mailto:ola@olatech.ai" className="auth-layout-footer-link">
+            <FileTextOutlined style={{ fontSize: '13px' }} />
             Support
           </a>
         </div>

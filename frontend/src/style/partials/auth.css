@@ -39,3 +39,21 @@
 .sideContent * {
   color: #4f5d75 !important;
 }
+
+.auth-layout-footer-link {
+  color: #9CA3AF;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.2s ease;
+}
+
+.auth-layout-footer-link:hover {
+  color: #1640D6; /* 项目主题色 */
+}
+
+.auth-layout-footer-link .anticon {
+  color: inherit;
+  transition: color 0.2s ease;
+}
