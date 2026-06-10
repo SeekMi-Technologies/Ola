@@ -147,10 +147,15 @@ test -d ~/dev/crm/backend && test -d ~/dev/nanobot/nanobot && echo "siblings OK"
 cd ~/dev/crm
 cp backend/.env.example backend/.env
 # Now open backend/.env and fill these 4 (zyd will hand them over Slack/1Password):
-#   DATABASE=mongodb+srv://...        (shared Atlas cluster)
+#   DATABASE=mongodb+srv://...        (DEV Atlas cluster `ola-dev.qc8fvks`, db `oladev` — #351.
+#                                      NEVER the prod URI: start-dev.sh fingerprint-compares
+#                                      against .secrets/SERVERS.env and refuses to start on match.
+#                                      Machines without .secrets/ skip the check.)
 #   JWT_SECRET=...                    (any 64-hex string; `openssl rand -hex 32`)
 #   MCP_SERVICE_TOKEN=...             (dev-shared value from zyd)
 #   GEMINI_API_KEY=AIza...            (zyd's dev key, OR your own from aistudio.google.com)
+# Fresh dev DB? Seed it once (admin@admin.com + default settings):
+#   cd backend && ADMIN_EMAIL=admin@admin.com ADMIN_PASSWORD=admin123 npm run setup
 
 # Verify:
 grep -E '^(DATABASE|JWT_SECRET|MCP_SERVICE_TOKEN|GEMINI_API_KEY)=' backend/.env | wc -l
