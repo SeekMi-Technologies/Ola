@@ -76,7 +76,7 @@ async function setupApp() {
       },
     ]);
     console.log('👍 PaymentMode created : Done!');
-    const setupIndexes = require('./setup/indexSetup');
+    const setupIndexes = require('./indexSetup');
     try {
       await setupIndexes();
     } catch (error) {
@@ -88,7 +88,7 @@ async function setupApp() {
   } catch (e) {
     console.log('\n🚫 Error! The Error info is below');
     console.log(e);
-    process.exit();
+    process.exit(1);
   }
 }
 
