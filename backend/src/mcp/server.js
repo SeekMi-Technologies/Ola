@@ -24,7 +24,7 @@ const {
 // require('./auth') 会在加载时校验 MCP_SERVICE_TOKEN env，缺失即抛错 → 整进程退出
 const requireAuth = require('./auth');
 const { auditLog, hashInput } = require('./logger');
-const { bootstrap, getSystemAdmin } = require('./bootstrap');
+const { bootstrap } = require('./bootstrap');
 const { runWithContext } = require('./context');
 const { decideActingAdmin } = require('./headerResolver');
 // NOTE: do NOT require('./tools/registry') at top-level — it transitively
@@ -217,15 +217,10 @@ async function main() {
   // Internal endpoint for nanobot WhatsApp channel to upload inbound audio
   // into CRM File storage + trigger auto-transcription. Auth: Bearer token
   // (same MCP_SERVICE_TOKEN) + X-Acting-As for admin identity.
-  // Reuses fileController/upload.js logic (dedup, disk write, auto-Job).
+  // Uses shared processUpload() from fileController — single source of truth
+  // for dedup, disk write, File/Job doc creation, and transcription kick.
   const multer = require('multer');
-  const crypto = require('crypto');
-  const fs = require('fs').promises;
-  const path = require('path');
-  const { v4: uuidv4 } = require('uuid');
-  const { UPLOADS_DIR, resolveUploadPath } = require('@/utils/uploadsPath');
-  const mongoose = require('mongoose');
-  const runTranscription = require('@/jobs/transcriptionWorker');
+  const processUpload = require('@/controllers/appControllers/fileController/processUpload');
 
   const internalMulter = multer({
     storage: multer.memoryStorage(),
@@ -236,29 +231,19 @@ async function main() {
     '/internal/upload-audio',
     requireAuth,
     async (req, res, next) => {
-      // Resolve acting admin from X-Acting-As header.
-      // Single-tenant fallback: if no X-Acting-As, use system admin (from bootstrap).
-      const actingAs = req.headers['x-acting-as'];
-      const Admin = mongoose.model('Admin');
-      try {
-        if (actingAs) {
-          const admin = await Admin.findById(actingAs);
-          if (!admin) {
-            return res.status(404).json({ ok: false, code: 'NOT_FOUND', message: `Admin ${actingAs} not found` });
-          }
-          req.admin = admin;
-        } else {
-          // Single-tenant fallback: use the system admin (first admin, role=system)
-          const bootAdmin = await getSystemAdmin();
-          if (!bootAdmin) {
-            return res.status(401).json({ ok: false, code: 'UNAUTHORIZED', message: 'No system admin found' });
-          }
-          req.admin = bootAdmin;
-        }
-        next();
-      } catch (err) {
-        next(err);
+      // Resolve acting admin via decideActingAdmin (same function used by
+      // POST /mcp). Rejects if X-Acting-As is missing — this endpoint is
+      // only called by nanobot (multi-tenant), which always sends the header.
+      const decision = await decideActingAdmin(req.headers['x-acting-as'], 'internal/upload-audio');
+      if (!decision.ok) {
+        return res.status(decision.status).json({
+          ok: false,
+          code: decision.code,
+          message: decision.message,
+        });
       }
+      req.admin = decision.actingAdmin;
+      next();
     },
     (req, res, next) => {
       internalMulter(req, res, (err) => {
@@ -272,63 +257,15 @@ async function main() {
           return res.status(400).json({ ok: false, code: 'VALIDATION', message: 'Missing file field' });
         }
 
-        const FileModel = mongoose.model('File');
-        const JobModel = mongoose.model('Job');
+        const result = await processUpload(req.file, req.admin, { transcribeVideo: true });
+        const { fileDoc, transcriptionJobId, deduped } = result;
 
-        // Dedup by content hash per admin
-        const contentHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
-        const existing = await FileModel.findOne({ createdBy: req.admin._id, contentHash, removed: false });
-        if (existing) {
-          console.log(`[internal/upload-audio] dedup: ${existing._id} for admin ${req.admin._id} (${req.file.size} bytes)`);
-          return res.status(200).json({
-            ok: true,
-            fileId: existing._id,
-            originalName: existing.originalName,
-            transcriptionJobId: existing.transcriptionJobId,
-            deduped: true,
-          });
+        if (deduped) {
+          console.log(`[internal/upload-audio] dedup: ${fileDoc._id} for admin ${req.admin._id} (${req.file.size} bytes)`);
+        } else {
+          console.log(`[internal/upload-audio] ${fileDoc._id} uploaded for admin ${req.admin._id} (${req.file.size} bytes)`);
         }
 
-        // Write to disk
-        const adminId = req.admin._id.toString();
-        const now = new Date();
-        const yyyy = String(now.getFullYear());
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        const ext = path.extname(req.file.originalname || '.ogg').toLowerCase().slice(0, 9) || '.ogg';
-        const uniqueName = `${uuidv4()}${ext}`;
-        const relativeSourcePath = path.join(adminId, yyyy, mm, uniqueName);
-        const absoluteSourcePath = resolveUploadPath(relativeSourcePath);
-        await fs.mkdir(path.dirname(absoluteSourcePath), { recursive: true });
-        await fs.writeFile(absoluteSourcePath, req.file.buffer);
-
-        // Create File doc
-        const fileDoc = await FileModel.create({
-          createdBy: req.admin._id,
-          originalName: req.file.originalname || `whatsapp_audio_${Date.now()}${ext}`,
-          mimeType: req.file.mimetype || 'audio/ogg',
-          sizeBytes: req.file.size,
-          sourcePath: relativeSourcePath,
-          contentHash,
-        });
-
-        // Auto-trigger transcription for audio files
-        let transcriptionJobId = null;
-        const mime = req.file.mimetype || 'audio/ogg';
-        if (mime.startsWith('audio/') || mime.startsWith('video/')) {
-          const job = await JobModel.create({
-            createdBy: req.admin._id,
-            type: 'transcription',
-            refModel: 'File',
-            refId: fileDoc._id,
-          });
-          await FileModel.findByIdAndUpdate(fileDoc._id, { transcriptionJobId: job._id });
-          transcriptionJobId = job._id;
-          runTranscription(fileDoc, job).catch((err) => {
-            console.error(`[internal/upload-audio] transcription worker failed for File ${fileDoc._id}:`, err.message);
-          });
-        }
-
-        console.log(`[internal/upload-audio] ${fileDoc._id} uploaded for admin ${adminId} (${req.file.size} bytes)`);
         return res.status(200).json({
           ok: true,
           fileId: fileDoc._id,
@@ -336,7 +273,7 @@ async function main() {
           sizeBytes: fileDoc.sizeBytes,
           mimeType: fileDoc.mimeType,
           transcriptionJobId,
-          deduped: false,
+          deduped,
         });
       } catch (err) {
         console.error('[internal/upload-audio] error:', err);
