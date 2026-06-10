@@ -1,49 +1,29 @@
 import useLanguage from '@/locale/useLanguage';
-
-import { Layout, Col, Divider, Typography } from 'antd';
-
+import { Typography } from 'antd';
 import AuthLayout from '@/layout/AuthLayout';
-import SideContent from './SideContent';
-import LanguageToggle from '@/components/LanguageToggle';
 
-import logo from '@/style/images/OLA_LOGO.png';
-
-const { Content } = Layout;
 const { Title } = Typography;
 
-const AuthModule = ({ authContent, AUTH_TITLE, isForRegistre = false }) => {
+const AuthModule = ({ authContent, AUTH_TITLE }) => {
   const translate = useLanguage();
   return (
-    <AuthLayout sideContent={<SideContent />}>
-      <Content
-        style={{
-          padding: isForRegistre ? '40px 30px 30px' : '100px 30px 30px',
-          maxWidth: '440px',
-          margin: '0 auto',
-        }}
-      >
-        <Col xs={{ span: 24 }} sm={{ span: 24 }} md={{ span: 0 }} span={0}>
-          <img
-            src={logo}
-            alt="Logo"
-            style={{
-              margin: '0px auto 20px',
-              display: 'block',
-              height: 63,
-              width: 'auto',
-              objectFit: 'contain',
-            }}
-          />
-          <div className="space10" />
-        </Col>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Title level={1} style={{ margin: 0 }}>{translate(AUTH_TITLE)}</Title>
-          <LanguageToggle variant="auth" />
-        </div>
+    <AuthLayout>
+      <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+        <Title
+          level={1}
+          style={{
+            margin: 0,
+            fontSize: '28px',
+            fontWeight: 600,
+            color: '#111827',
+            letterSpacing: '-0.5px',
+          }}
+        >
+          {translate(AUTH_TITLE)}
+        </Title>
+      </div>
 
-        <Divider />
-        <div className="site-layout-content">{authContent}</div>
-      </Content>
+      <div className="site-layout-content">{authContent}</div>
     </AuthLayout>
   );
 };

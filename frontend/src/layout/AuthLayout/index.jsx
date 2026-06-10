@@ -1,34 +1,75 @@
-import React from 'react';
-import { Layout, Row, Col } from 'antd';
+import { Layout, Card } from 'antd';
+import LanguageSelect from '@/components/LanguageSelect';
+import logo from '@/style/images/OLA_LOGO.svg';
 
-import { useSelector } from 'react-redux';
-import { Content } from 'antd/lib/layout/layout';
-
-export default function AuthLayout({ sideContent, children }) {
+export default function AuthLayout({ children }) {
   return (
-    <Layout>
-      <Row>
-        <Col
-          xs={{ span: 0, order: 2 }}
-          sm={{ span: 0, order: 2 }}
-          md={{ span: 11, order: 1 }}
-          lg={{ span: 12, order: 1 }}
+    <Layout
+      style={{
+        minHeight: '100vh',
+        background: '#F9FAFB', // 现代淡灰背景
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '40px 24px 32px',
+      }}
+    >
+      {/* 外置 Logo - 位于卡片顶部中央 */}
+      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <img
+          src={logo}
+          alt="Ola Logo"
           style={{
-            minHeight: '100vh',
+            height: '36px',
+            width: 'auto',
+            objectFit: 'contain',
           }}
-        >
-          {sideContent}
-        </Col>
-        <Col
-          xs={{ span: 24, order: 1 }}
-          sm={{ span: 24, order: 1 }}
-          md={{ span: 13, order: 2 }}
-          lg={{ span: 12, order: 2 }}
-          style={{ background: '#FFF', minHeight: '100vh' }}
-        >
-          {children}
-        </Col>
-      </Row>
+        />
+      </div>
+
+      {/* 原生 Ant Design Card 容器 */}
+      <Card
+        bordered={true}
+        style={{
+          width: '100%',
+          maxWidth: '460px',
+          borderRadius: '16px',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+        }}
+        bodyStyle={{
+          padding: '40px 32px',
+        }}
+      >
+        {children}
+      </Card>
+
+      {/* 外置 Footer - 位于卡片底部中央，右侧为语言 Select 与 Support */}
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '460px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          color: '#9CA3AF',
+          fontSize: '13px',
+          marginTop: '32px',
+        }}
+      >
+        <span>© 2026 OLA Technologies, Inc.</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <LanguageSelect />
+          <span style={{ color: '#E5E7EB' }}>|</span>
+          <a href="mailto:ola@olatech.ai" style={{ color: '#9CA3AF', textDecoration: 'none' }}>
+            Support
+          </a>
+        </div>
+      </div>
     </Layout>
   );
 }

@@ -29,12 +29,11 @@ export default function OlaOs() {
 
   const needsOnboarding = isLoggedIn && current?.onboarded === false;
 
-  // 三层路由拦截:
-  // 1. 未登录 → AuthRouter（Login / Register）
-  // 2. 已登录 + 未上车 → /onboarding
-  // 3. 已登录 + 已上车 → DefaultApp（ErpApp）
+  const isAuthPath = ['/login', '/signup', '/register', '/forgetpassword', '/resetpassword'].some(
+    (p) => window.location.pathname === p || window.location.pathname.startsWith(p + '/')
+  );
 
-  if (!isLoggedIn && !bypassAuth) {
+  if ((!isLoggedIn && !bypassAuth) || isAuthPath) {
     return (
       <Localization>
         <AuthRouter />
