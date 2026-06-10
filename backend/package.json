@@ -13,6 +13,7 @@
     "add-admin": "node src/setup/addAdmin.js",
     "reset": "node src/setup/reset.js",
     "mcp:dev": "node src/mcp/server.js",
+    "test:deploy": "node --test ../deploy/db-fingerprint.test.js",
     "test": "jest",
     "lint": "eslint . --ext js --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint . --ext js --fix"

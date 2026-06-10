@@ -1,0 +1,59 @@
+# CD Operations
+
+## Release flow
+
+1. Ola and Ola_bot publish GHCR images tagged with the full Git commit SHA.
+2. Changes from `dev`, `ola-dev`, or the temporary `docker-CD` branches deploy to staging.
+3. `/opt/ola-staging/last-green.env` records the tested CRM and nanobot SHA pair.
+4. `Promote Production` accepts only that exact pair and waits for approval from the
+   GitHub `production` Environment.
+5. Production deploys Box 1, then Box 2. Any failed check restores both previous images.
+
+## GitHub configuration
+
+Create `staging` and `production` Environments. Add required reviewers to `production`.
+
+Repository secrets:
+
+- `CROSS_REPO_READ_TOKEN`, `GHCR_PULL_USER`, `GHCR_PULL_TOKEN`
+- `DEVELOPMENT_DATABASE`, `STAGING_DATABASE`, `PRODUCTION_DATABASE`
+- `STAGING_HOST`, `STAGING_USER`, `STAGING_SSH_KEY`, `STAGING_SSH_KNOWN_HOSTS`
+- `STAGING_TAILSCALE_IP`, `STAGING_BOOTSTRAP_CRM_SHA`, `STAGING_BOOTSTRAP_NANOBOT_SHA`
+- `STAGING_BACKEND_ENV_B64`, `STAGING_ROOT_ENV_B64`
+- `STAGING_NANOBOT_CONFIG_B64`, `STAGING_NANOBOT_ENV_B64`
+- `STAGING_TEST_EMAIL`, `STAGING_TEST_PASSWORD`, `STAGING_MCP_SERVICE_TOKEN`
+- `PRODUCTION_SSH_KEY`, `DEPLOY_SSH_KNOWN_HOSTS`
+- `PRODUCTION_BOX1_HOST`, `PRODUCTION_BOX1_USER`, `PRODUCTION_BOX1_TAILSCALE_IP`
+- `PRODUCTION_BOX2_HOST`, `PRODUCTION_BOX2_USER`, `PRODUCTION_BOX2_TAILSCALE_IP`
+- `PRODUCTION_BACKEND_ENV_B64`, `PRODUCTION_ROOT_ENV_B64`
+- `PRODUCTION_NANOBOT_CONFIG_B64`, `PRODUCTION_NANOBOT_ENV_B64`
+- `PRODUCTION_TEST_EMAIL`, `PRODUCTION_TEST_PASSWORD`, `PRODUCTION_MCP_SERVICE_TOKEN`
+
+Ola_bot also needs `OLA_DEPLOY_TOKEN`, scoped to dispatch workflows in the Ola repository.
+
+Base64 configuration secrets are decoded only into mode-600 files. MongoDB URI values are
+parsed structurally; workflows never print complete URIs or credentials.
+
+## Server layout
+
+- Box 1: production CRM frontend, backend, and MCP.
+- Box 2: production nanobot API, gateway, channels, and WhatsApp bridge.
+- Box 3/5: shared Gotenberg.
+- Box 4: devboard only.
+- Box 6: full staging stack.
+- Box 7: excluded `ola.services` products.
+
+Run `deploy/bootstrap-staging.sh` once on Box 6, then authenticate Tailscale. Add the proxied
+Cloudflare record `staging.olatech.ai -> 47.254.40.1` and use Full (strict) origin TLS.
+
+## Cleanup
+
+Production cleanup is deliberately two phase:
+
+1. On the first successful promotion, obsolete services are disabled.
+2. Observe for seven days and retain backups of `/root/.nanobot`, CRM upload volumes, and
+   repository secret backups stored outside the checkout.
+3. Remove stale units/files and prune old images only after immutable rollback has been proven.
+
+Do not remove `/app/crm` or the old Box 2 systemd definitions before the first successful
+promotion. They are the initial migration rollback path.

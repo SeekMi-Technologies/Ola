@@ -70,6 +70,9 @@ jobs:
       - name: Production build
         run: npm run build
 
+      - name: Validate nginx configuration
+        run: docker run --rm -v "$PWD/nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine nginx -t
+
       - name: Security audit (critical prod deps)
         run: npm audit --audit-level=critical --omit=dev
 
@@ -94,3 +97,7 @@ jobs:
         run: docker compose config -q
         env:
           MCP_BIND_ADDR: 127.0.0.1
+
+      - name: Deployment database isolation tests
+        run: npm run test:deploy
+        working-directory: backend
