@@ -61,6 +61,10 @@ Install a Cloudflare Origin Certificate at `/etc/nginx/tls/staging.olatech.ai.pe
 mode-600 private key at `/etc/nginx/tls/staging.olatech.ai.key`. The deployment workflow
 validates and reloads `deploy/nginx-staging.conf`.
 
+Box 6 uses explicit Alibaba and Cloudflare DNS resolvers and does not accept Tailscale DNS.
+Its Alibaba Linux repositories use `https://mirrors.aliyun.com`; the default internal
+`mirrors.cloud.aliyuncs.com` endpoint is unreachable from this host.
+
 ## Cleanup
 
 Production cleanup is deliberately two phase:

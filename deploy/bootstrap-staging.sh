@@ -5,6 +5,22 @@ if [ "$(id -u)" -ne 0 ]; then
   exec sudo "$0" "$@"
 fi
 
+if command -v nmcli >/dev/null 2>&1; then
+  connection="$(nmcli -g GENERAL.CONNECTION device show eth0 2>/dev/null || true)"
+  if [ -n "$connection" ] && [ "$connection" != -- ]; then
+    nmcli connection modify "$connection" \
+      ipv4.ignore-auto-dns yes \
+      ipv4.dns "223.5.5.5 1.1.1.1"
+    nmcli device reapply eth0
+  fi
+fi
+
+# Alibaba's internal mirror is not reachable from every region/VPC.
+if [ -d /etc/yum.repos.d ]; then
+  sed -i 's#http://mirrors.cloud.aliyuncs.com#https://mirrors.aliyun.com#g' \
+    /etc/yum.repos.d/*.repo
+fi
+
 if command -v apt-get >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
@@ -45,6 +61,9 @@ if ! command -v tailscale >/dev/null 2>&1; then
   curl -fsSL https://tailscale.com/install.sh | sh
 fi
 systemctl enable --now tailscaled
+if tailscale status --json 2>/dev/null | jq -e '.BackendState == "Running"' >/dev/null; then
+  tailscale set --accept-dns=false
+fi
 
 if ! swapon --show=NAME --noheadings | grep -qx /swapfile; then
   fallocate -l 2G /swapfile
