@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: ["Build & Push Images"]
     types: [completed]
-    branches: [dev, ola-dev, docker-CD]
+    branches: [dev]
   repository_dispatch:
     types: [nanobot-image]
   workflow_dispatch:
@@ -160,7 +160,7 @@ jobs:
           "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':8900/health >/dev/null"
           "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':8901/health >/dev/null"
           "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':3001/health >/dev/null"
-          "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://100.80.227.26:3000/health >/dev/null"
+          "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/health >/dev/null"
 
           if ! "${SSH[@]}" "cd /opt/ola-staging/crm && DOMAINS=staging.olatech.ai TEST_EMAIL='$TEST_EMAIL' TEST_PASSWORD='$TEST_PASSWORD' MCP_HOST='$STAGING_TAILSCALE_IP' MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-staging/smoke-prod.sh"; then
             if [[ "$previous_crm" =~ ^[0-9a-f]{40}$ && "$previous_bot" =~ ^[0-9a-f]{40}$ ]]; then

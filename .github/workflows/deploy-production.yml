@@ -158,7 +158,7 @@ jobs:
           "${SSH2[@]}" "curl --fail --silent --show-error --max-time 10 http://'$BOX2_TAILSCALE_IP':8900/health >/dev/null"
           "${SSH2[@]}" "curl --fail --silent --show-error --max-time 10 http://'$BOX2_TAILSCALE_IP':8901/health >/dev/null"
           "${SSH2[@]}" "curl --fail --silent --show-error --max-time 10 http://'$BOX2_TAILSCALE_IP':3001/health >/dev/null"
-          "${SSH1[@]}" 'curl --fail --silent --show-error --max-time 10 http://100.80.227.26:3000/health >/dev/null'
+          "${SSH1[@]}" 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1:80/health >/dev/null'
           "${SSH1[@]}" "cd /opt/ola-production/crm && DOMAINS='app.olajob.cn app.olatech.ai' TEST_EMAIL='$TEST_EMAIL' TEST_PASSWORD='$TEST_PASSWORD' MCP_HOST='$BOX1_TAILSCALE_IP' MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-production/smoke-prod.sh"
 
           trap - ERR

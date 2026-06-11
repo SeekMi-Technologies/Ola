@@ -10,7 +10,7 @@ name: Build & Push Images
 
 on:
   push:
-    branches: [dev, main, docker-CD]
+    branches: [dev, main]
   workflow_dispatch:
 
 # Cancel an in-flight build when a newer commit lands on the same ref.
