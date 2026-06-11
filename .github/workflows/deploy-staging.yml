@@ -185,7 +185,7 @@ jobs:
           wait_for_health "http://$STAGING_TAILSCALE_IP:8901/health"
           wait_for_health "http://$STAGING_TAILSCALE_IP:3001/health"
           wait_for_health "http://127.0.0.1:8080/health"
-          "${SSH[@]}" "MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-staging/verify-whatsapp.sh /opt/ola-staging/nanobot-state http://'$STAGING_TAILSCALE_IP':3001 nanobot-gateway"
+          "${SSH[@]}" "MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-staging/verify-whatsapp.sh /opt/ola-staging/nanobot-state http://'$STAGING_TAILSCALE_IP':3001"
 
           if ! "${SSH[@]}" "cd /opt/ola-staging/crm && DOMAINS=staging.olatech.ai TEST_EMAIL='$TEST_EMAIL' TEST_PASSWORD='$TEST_PASSWORD' MCP_HOST='$STAGING_TAILSCALE_IP' MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-staging/smoke-prod.sh"; then
             if [[ "$previous_crm" =~ ^[0-9a-f]{40}$ && "$previous_bot" =~ ^[0-9a-f]{40}$ ]]; then

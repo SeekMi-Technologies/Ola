@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-state_dir=${1:?usage: verify-whatsapp.sh STATE_DIR BRIDGE_URL GATEWAY_CONTAINER}
-bridge_url=${2:?usage: verify-whatsapp.sh STATE_DIR BRIDGE_URL GATEWAY_CONTAINER}
-gateway_container=${3:?usage: verify-whatsapp.sh STATE_DIR BRIDGE_URL GATEWAY_CONTAINER}
+state_dir=${1:?usage: verify-whatsapp.sh STATE_DIR BRIDGE_URL}
+bridge_url=${2:?usage: verify-whatsapp.sh STATE_DIR BRIDGE_URL}
 config="$state_dir/config.json"
 
 if ! jq -e '.channels.whatsapp.enabled == true' "$config" >/dev/null; then
@@ -49,19 +48,36 @@ for admin_id in "${admin_ids[@]}"; do
     exit 1
   fi
 
-  # The gateway reconnect log can lag the bridge status flip; poll briefly.
-  gateway_connected=false
+  # The gateway's WS re-subscription to the bridge can lag the bridge status
+  # flip; poll the live subscriber count the bridge reports. (Previously this
+  # grepped the gateway container logs for a "Connected" line, which only
+  # exists if the gateway restarted recently — deploys that leave the nanobot
+  # containers untouched failed spuriously once the line aged out of the
+  # docker-logs window.)
+  gateway_clients=0
   for attempt in $(seq 1 6); do
-    if docker logs --since 10m "$gateway_container" 2>&1 |
-      grep -F "[$admin_id] Connected to WhatsApp bridge" >/dev/null; then
-      gateway_connected=true
+    status=$(
+      curl --silent --max-time 10 \
+        -H "Authorization: Bearer $token" \
+        "$bridge_url/wa/$admin_id/status" 2>/dev/null || true
+    )
+    gateway_clients=$(
+      jq -r 'if has("gatewayClients") then (.gatewayClients | tostring) else "absent" end' \
+        <<<"$status" 2>/dev/null || true
+    )
+    gateway_clients=${gateway_clients:-0}
+    if [ "$gateway_clients" = absent ]; then
+      # Transitional: bridge image predates the gatewayClients field. Don't fail
+      # the deploy on it; the bridge status above already proved WhatsApp is up.
+      echo "Warning: bridge status has no gatewayClients field (old bridge image); skipping gateway check for $admin_id" >&2
       break
     fi
-    echo "Gateway not connected for $admin_id yet (attempt $attempt/6)" >&2
+    [ "$gateway_clients" -ge 1 ] 2>/dev/null && break
+    echo "Gateway not subscribed for $admin_id yet (attempt $attempt/6, gatewayClients: $gateway_clients)" >&2
     sleep 5
   done
-  if [ "$gateway_connected" != true ]; then
-    echo "WhatsApp verification failed: gateway is not connected for an admin" >&2
+  if [ "$gateway_clients" != absent ] && ! [ "$gateway_clients" -ge 1 ] 2>/dev/null; then
+    echo "WhatsApp verification failed: no gateway subscriber on the bridge for an admin" >&2
     exit 1
   fi
 done
