@@ -1,0 +1,73 @@
+name: Build & Push Images
+
+# CD Phase A — build the app images once and push to GHCR so staging/prod can later
+# *pull the identical tag* (by commit SHA) instead of rebuilding on each box.
+#
+# This is the push-on-merge layer. ci.yml's "Docker build smoke" stays as the fast,
+# no-push PR signal; this workflow only runs on pushes to release branches (+ manual),
+# never on pull_request — a self-hosted runner must never push images from untrusted
+# PR code, and even on GitHub-hosted runners we don't publish artifacts from PRs.
+
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+# Cancel an in-flight build when a newer commit lands on the same ref.
+concurrency:
+  group: build-push-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    name: Build & push ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ola-backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - image: ola-frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile.prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/seekmi-technologies/${{ matrix.image }}
+          tags: |
+            # Immutable per-commit tag == github.sha; deploy pulls this exact build.
+            type=sha,format=long,prefix=
+            # Moving branch tag: :dev / :main.
+            type=ref,event=branch
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

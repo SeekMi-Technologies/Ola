@@ -1,16 +1,16 @@
-const mongoose = require('mongoose');
-
 // 设置索引的函数
 const setupIndexes = async () => {
   try {
     console.log('开始设置数据库索引...');
     
-    // 获取模型引用
-    const Invoice = mongoose.model('Invoice');
-    const Client = mongoose.model('Client');
-    const PurchaseOrder = mongoose.model('PurchaseOrder');
-    const Admin = mongoose.model('Admin');
-    const AdminPassword = mongoose.model('AdminPassword');
+    // Require models directly so this module is self-contained — callers
+    // (setup.js) don't pre-register appModels, and mongoose.model() throws
+    // MissingSchemaError on unregistered names.
+    const Invoice = require('../models/appModels/Invoice');
+    const Client = require('../models/appModels/Client');
+    const PurchaseOrder = require('../models/appModels/PurchaseOrder');
+    const Admin = require('../models/coreModels/Admin');
+    const AdminPassword = require('../models/coreModels/AdminPassword');
 
     // Admin 登录热路径：login 按 email 查、每次 /api 请求 isValidAuthToken
     // 按 _id/user 查。之前缺索引，所有认证请求都扫全表

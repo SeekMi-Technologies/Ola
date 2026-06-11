@@ -1,0 +1,185 @@
+name: Deploy Staging
+
+on:
+  workflow_run:
+    workflows: ["Build & Push Images"]
+    types: [completed]
+    branches: [dev]
+  repository_dispatch:
+    types: [nanobot-image]
+  workflow_dispatch:
+    inputs:
+      crm_sha:
+        description: Immutable Ola image SHA; blank keeps last green
+        required: false
+      nanobot_sha:
+        description: Immutable Ola_bot image SHA; blank keeps last green
+        required: false
+
+concurrency:
+  group: ola-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    steps:
+      - name: Resolve requested release
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_SHA: ${{ github.event.client_payload.sha }}
+          INPUT_CRM_SHA: ${{ inputs.crm_sha }}
+          INPUT_NANOBOT_SHA: ${{ inputs.nanobot_sha }}
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+          BOOTSTRAP_CRM_SHA: ${{ secrets.STAGING_BOOTSTRAP_CRM_SHA }}
+          BOOTSTRAP_NANOBOT_SHA: ${{ secrets.STAGING_BOOTSTRAP_NANOBOT_SHA }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          SSH=(ssh -i ~/.ssh/deploy_key "$STAGING_USER@$STAGING_HOST")
+          current="$("${SSH[@]}" 'cat /opt/ola-staging/last-green.env 2>/dev/null || true')"
+          current_crm="$(printf '%s\n' "$current" | sed -n 's/^CRM_SHA=//p')"
+          current_bot="$(printf '%s\n' "$current" | sed -n 's/^NANOBOT_SHA=//p')"
+
+          crm_sha="${INPUT_CRM_SHA:-$current_crm}"
+          bot_sha="${INPUT_NANOBOT_SHA:-$current_bot}"
+          if [ "$EVENT_NAME" = workflow_run ]; then crm_sha="$WORKFLOW_SHA"; fi
+          if [ "$EVENT_NAME" = repository_dispatch ]; then bot_sha="$DISPATCH_SHA"; fi
+          crm_sha="${crm_sha:-$BOOTSTRAP_CRM_SHA}"
+          bot_sha="${bot_sha:-$BOOTSTRAP_NANOBOT_SHA}"
+          [[ "$crm_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid CRM SHA"; exit 1; }
+          [[ "$bot_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid nanobot SHA"; exit 1; }
+          echo "crm_sha=$crm_sha" >> "$GITHUB_OUTPUT"
+          echo "nanobot_sha=$bot_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout deployment definitions
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.crm_sha }}
+          path: crm
+
+      - name: Checkout nanobot deployment definitions
+        uses: actions/checkout@v4
+        with:
+          repository: SeekMi-Technologies/Ola_bot
+          ref: ${{ steps.release.outputs.nanobot_sha }}
+          path: nanobot
+
+      - name: Validate database isolation
+        env:
+          DEVELOPMENT_DATABASE: ${{ secrets.DEVELOPMENT_DATABASE }}
+          STAGING_DATABASE: ${{ secrets.STAGING_DATABASE }}
+          PRODUCTION_DATABASE: ${{ secrets.PRODUCTION_DATABASE }}
+        run: >-
+          node crm/deploy/db-fingerprint.js
+          --allow-equal=DEVELOPMENT_DATABASE,STAGING_DATABASE
+          DEVELOPMENT_DATABASE STAGING_DATABASE PRODUCTION_DATABASE
+
+      - name: Render protected configuration
+        env:
+          BACKEND_ENV_B64: ${{ secrets.STAGING_BACKEND_ENV_B64 }}
+          ROOT_ENV_B64: ${{ secrets.STAGING_ROOT_ENV_B64 }}
+          NANOBOT_CONFIG_B64: ${{ secrets.STAGING_NANOBOT_CONFIG_B64 }}
+          NANOBOT_ENV_B64: ${{ secrets.STAGING_NANOBOT_ENV_B64 }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 rendered/crm/backend rendered/nanobot-state
+          printf '%s' "$BACKEND_ENV_B64" | base64 --decode > rendered/crm/backend/.env
+          printf '%s' "$ROOT_ENV_B64" | base64 --decode > rendered/crm/.env
+          printf '%s' "$NANOBOT_CONFIG_B64" | base64 --decode > rendered/nanobot-state/config.json
+          printf '%s' "$NANOBOT_ENV_B64" | base64 --decode > rendered/nanobot.env
+          node -e '
+            const fs = require("fs");
+            const path = "rendered/nanobot-state/config.json";
+            const config = JSON.parse(fs.readFileSync(path, "utf8"));
+            config.channels ??= {};
+            config.channels.whatsapp ??= {};
+            config.channels.whatsapp.enabled = true;
+            config.channels.whatsapp.bridgeUrl = "ws://nanobot-bridge:3001";
+            fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
+          '
+          chmod 600 rendered/crm/backend/.env rendered/crm/.env rendered/nanobot-state/config.json rendered/nanobot.env
+
+      - name: Deploy and verify staging
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          GHCR_USER: ${{ secrets.GHCR_PULL_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          CRM_SHA: ${{ steps.release.outputs.crm_sha }}
+          NANOBOT_SHA: ${{ steps.release.outputs.nanobot_sha }}
+          TEST_EMAIL: ${{ secrets.STAGING_TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.STAGING_TEST_PASSWORD }}
+          MCP_SERVICE_TOKEN: ${{ secrets.STAGING_MCP_SERVICE_TOKEN }}
+          STAGING_TAILSCALE_IP: ${{ secrets.STAGING_TAILSCALE_IP }}
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i ~/.ssh/deploy_key "$STAGING_USER@$STAGING_HOST")
+          SCP=(scp -i ~/.ssh/deploy_key)
+          "${SSH[@]}" 'sudo install -d -m 755 /opt/ola-staging/crm/backend /opt/ola-staging/nanobot /opt/ola-staging/nanobot-state && sudo chown -R "$USER":"$USER" /opt/ola-staging'
+          "${SCP[@]}" crm/docker-compose.yml crm/docker-compose.deploy.yml crm/docker-compose.staging.yml "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/crm/"
+          "${SCP[@]}" crm/deploy/nginx-staging.conf crm/deploy/provision-nanobot-workspaces.sh crm/deploy/verify-whatsapp.sh "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/"
+          "${SCP[@]}" -r crm/ola/nanobot-workspace "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/"
+          "${SCP[@]}" crm/scripts/smoke-prod.sh "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/"
+          "${SCP[@]}" nanobot/docker-compose.yml nanobot/docker-compose.deploy.yml "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/nanobot/"
+          "${SCP[@]}" rendered/crm/.env "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/crm/.env"
+          "${SCP[@]}" rendered/crm/backend/.env "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/crm/backend/.env"
+          "${SCP[@]}" rendered/nanobot-state/config.json "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/nanobot-state/config.json"
+          "${SCP[@]}" rendered/nanobot.env "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/nanobot/.env"
+          "${SSH[@]}" "bash /opt/ola-staging/provision-nanobot-workspaces.sh /opt/ola-staging/nanobot-state /opt/ola-staging/nanobot-workspace"
+          "${SSH[@]}" "sudo chown -R 1000:1000 /opt/ola-staging/nanobot-state"
+
+          printf '%s' "$GHCR_TOKEN" | "${SSH[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+          previous="$("${SSH[@]}" 'cat /opt/ola-staging/last-green.env 2>/dev/null || true')"
+          previous_crm="$(printf '%s\n' "$previous" | sed -n 's/^CRM_SHA=//p')"
+          previous_bot="$(printf '%s\n' "$previous" | sed -n 's/^NANOBOT_SHA=//p')"
+
+          deploy_pair() {
+            local crm_tag="$1" bot_tag="$2"
+            "${SSH[@]}" "set -e;
+              sudo install -m 644 /opt/ola-staging/nginx-staging.conf /etc/nginx/conf.d/ola-staging.conf;
+              sudo nginx -t;
+              sudo systemctl reload nginx;
+              cd /opt/ola-staging/crm;
+              CRM_IMAGE_TAG='$crm_tag' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.staging.yml pull;
+              CRM_IMAGE_TAG='$crm_tag' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.staging.yml up -d --no-build;
+              cd /opt/ola-staging/nanobot;
+              NANOBOT_IMAGE_TAG='$bot_tag' docker compose -p ola-staging-nanobot -f docker-compose.yml -f docker-compose.deploy.yml pull;
+              NANOBOT_IMAGE_TAG='$bot_tag' docker compose -p ola-staging-nanobot -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-build"
+          }
+
+          deploy_pair "$CRM_SHA" "$NANOBOT_SHA"
+
+          # Staging temporarily shares the development database. Verify access
+          # without creating accounts, defaults, indexes, or other records.
+          "${SSH[@]}" "cd /opt/ola-staging/crm && CRM_IMAGE_TAG='$CRM_SHA' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.staging.yml exec -T backend node -e \"require('dotenv').config();const m=require('mongoose');m.connect(process.env.DATABASE).then(async()=>{await m.connection.db.admin().ping();await m.disconnect()}).catch((e)=>{console.error('database connectivity check failed');process.exit(1)})\""
+
+          "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':8900/health >/dev/null"
+          "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':8901/health >/dev/null"
+          "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':3001/health >/dev/null"
+          "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/health >/dev/null"
+          "${SSH[@]}" "MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-staging/verify-whatsapp.sh /opt/ola-staging/nanobot-state http://'$STAGING_TAILSCALE_IP':3001 nanobot-gateway"
+
+          if ! "${SSH[@]}" "cd /opt/ola-staging/crm && DOMAINS=staging.olatech.ai TEST_EMAIL='$TEST_EMAIL' TEST_PASSWORD='$TEST_PASSWORD' MCP_HOST='$STAGING_TAILSCALE_IP' MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-staging/smoke-prod.sh"; then
+            if [[ "$previous_crm" =~ ^[0-9a-f]{40}$ && "$previous_bot" =~ ^[0-9a-f]{40}$ ]]; then
+              deploy_pair "$previous_crm" "$previous_bot"
+            fi
+            exit 1
+          fi
+
+          "${SSH[@]}" "printf 'CRM_SHA=%s\nNANOBOT_SHA=%s\n' '$CRM_SHA' '$NANOBOT_SHA' > /opt/ola-staging/last-green.env"
