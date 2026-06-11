@@ -77,7 +77,6 @@ jobs:
         with:
           repository: SeekMi-Technologies/Ola_bot
           ref: ${{ steps.release.outputs.nanobot_sha }}
-          token: ${{ secrets.CROSS_REPO_READ_TOKEN }}
           path: nanobot
 
       - name: Validate database isolation
@@ -132,7 +131,9 @@ jobs:
           "${SCP[@]}" rendered/nanobot.env "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/nanobot/.env"
           "${SSH[@]}" "sudo chown -R 1000:1000 /opt/ola-staging/nanobot-state"
 
-          printf '%s' "$GHCR_TOKEN" | "${SSH[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+          if [ -n "$GHCR_TOKEN" ]; then
+            printf '%s' "$GHCR_TOKEN" | "${SSH[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+          fi
           previous="$("${SSH[@]}" 'cat /opt/ola-staging/last-green.env 2>/dev/null || true')"
           previous_crm="$(printf '%s\n' "$previous" | sed -n 's/^CRM_SHA=//p')"
           previous_bot="$(printf '%s\n' "$previous" | sed -n 's/^NANOBOT_SHA=//p')"
