@@ -40,6 +40,9 @@ if ! command -v docker >/dev/null 2>&1; then
     dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
     dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   else
+    # One-time bootstrap convenience only: this trusts whatever get.docker.com
+    # serves at run time. Do not copy into automated pipelines; pin a Docker
+    # release and verify its checksum there instead.
     curl -fsSL https://get.docker.com | sh
   fi
 fi

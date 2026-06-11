@@ -29,19 +29,38 @@ for admin_id in "${admin_ids[@]}"; do
       openssl dgst -sha256 -hmac "${MCP_SERVICE_TOKEN:?MCP_SERVICE_TOKEN is required}" -hex |
       awk '{print $2}'
   )
-  status=$(
-    curl --fail --silent --show-error --max-time 10 \
-      -H "Authorization: Bearer $token" \
-      "$bridge_url/wa/$admin_id/status"
-  )
-  bridge_status=$(jq -r '.status // "missing"' <<<"$status")
+  # The bridge needs time after container start to re-handshake with WhatsApp
+  # servers before it reports connected. Poll for up to ~2.5 minutes.
+  bridge_status=missing
+  for attempt in $(seq 1 30); do
+    status=$(
+      curl --silent --max-time 10 \
+        -H "Authorization: Bearer $token" \
+        "$bridge_url/wa/$admin_id/status" 2>/dev/null || true
+    )
+    bridge_status=$(jq -r '.status // "missing"' <<<"$status" 2>/dev/null || true)
+    bridge_status=${bridge_status:-missing}
+    [ "$bridge_status" = connected ] && break
+    echo "Bridge not ready for $admin_id (attempt $attempt/30, status: $bridge_status)" >&2
+    sleep 5
+  done
   if [ "$bridge_status" != connected ]; then
-    echo "WhatsApp verification failed: bridge status is $bridge_status" >&2
+    echo "WhatsApp verification failed: bridge status is $bridge_status after 30 attempts" >&2
     exit 1
   fi
 
-  if ! docker logs --since 10m "$gateway_container" 2>&1 |
-    grep -F "[$admin_id] Connected to WhatsApp bridge" >/dev/null; then
+  # The gateway reconnect log can lag the bridge status flip; poll briefly.
+  gateway_connected=false
+  for attempt in $(seq 1 6); do
+    if docker logs --since 10m "$gateway_container" 2>&1 |
+      grep -F "[$admin_id] Connected to WhatsApp bridge" >/dev/null; then
+      gateway_connected=true
+      break
+    fi
+    echo "Gateway not connected for $admin_id yet (attempt $attempt/6)" >&2
+    sleep 5
+  done
+  if [ "$gateway_connected" != true ]; then
     echo "WhatsApp verification failed: gateway is not connected for an admin" >&2
     exit 1
   fi

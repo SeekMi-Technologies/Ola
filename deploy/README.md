@@ -3,7 +3,7 @@
 ## Release flow
 
 1. Ola and Ola_bot publish GHCR images tagged with the full Git commit SHA.
-2. Changes from `dev`, `ola-dev`, or the temporary `docker-CD` branches deploy to staging.
+2. Changes from `dev` or `ola-dev` deploy to staging.
 3. `/opt/ola-staging/last-green.env` records the tested CRM and nanobot SHA pair.
 4. `Promote Production` accepts only that exact pair and waits for approval from the
    GitHub `production` Environment.
@@ -77,3 +77,7 @@ Production cleanup is deliberately two phase:
 
 Do not remove `/app/crm` or the old Box 2 systemd definitions before the first successful
 promotion. They are the initial migration rollback path.
+
+Run `deploy/harden-box2-bindings.sh` on Box 2 after the first successful promotion and before
+pruning old services. It rebinds the nanobot services from `0.0.0.0` to the Tailscale IP and
+keeps its own backup/rollback of the unit files it edits.
