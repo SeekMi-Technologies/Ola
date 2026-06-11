@@ -187,7 +187,7 @@ jobs:
           wait_for_health bot "http://$BOX2_TAILSCALE_IP:8901/health"
           wait_for_health bot "http://$BOX2_TAILSCALE_IP:3001/health"
           wait_for_health crm "http://127.0.0.1:80/health"
-          "${SSH2[@]}" "MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-production/verify-whatsapp.sh /opt/ola-production/nanobot-state http://'$BOX2_TAILSCALE_IP':3001 nanobot-gateway"
+          "${SSH2[@]}" "MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-production/verify-whatsapp.sh /opt/ola-production/nanobot-state http://'$BOX2_TAILSCALE_IP':3001"
           "${SSH1[@]}" "cd /opt/ola-production/crm && DOMAINS='app.olajob.cn app.olatech.ai' TEST_EMAIL='$TEST_EMAIL' TEST_PASSWORD='$TEST_PASSWORD' MCP_HOST='$BOX1_TAILSCALE_IP' MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-production/smoke-prod.sh"
 
           trap - ERR
