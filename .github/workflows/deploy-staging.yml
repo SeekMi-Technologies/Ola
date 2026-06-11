@@ -103,6 +103,16 @@ jobs:
           printf '%s' "$ROOT_ENV_B64" | base64 --decode > rendered/crm/.env
           printf '%s' "$NANOBOT_CONFIG_B64" | base64 --decode > rendered/nanobot-state/config.json
           printf '%s' "$NANOBOT_ENV_B64" | base64 --decode > rendered/nanobot.env
+          node -e '
+            const fs = require("fs");
+            const path = "rendered/nanobot-state/config.json";
+            const config = JSON.parse(fs.readFileSync(path, "utf8"));
+            config.channels ??= {};
+            config.channels.whatsapp ??= {};
+            config.channels.whatsapp.enabled = true;
+            config.channels.whatsapp.bridgeUrl = "ws://nanobot-bridge:3001";
+            fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
+          '
           chmod 600 rendered/crm/backend/.env rendered/crm/.env rendered/nanobot-state/config.json rendered/nanobot.env
 
       - name: Deploy and verify staging
@@ -123,13 +133,15 @@ jobs:
           SCP=(scp -i ~/.ssh/deploy_key)
           "${SSH[@]}" 'sudo install -d -m 755 /opt/ola-staging/crm/backend /opt/ola-staging/nanobot /opt/ola-staging/nanobot-state && sudo chown -R "$USER":"$USER" /opt/ola-staging'
           "${SCP[@]}" crm/docker-compose.yml crm/docker-compose.deploy.yml crm/docker-compose.staging.yml "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/crm/"
-          "${SCP[@]}" crm/deploy/nginx-staging.conf "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/"
+          "${SCP[@]}" crm/deploy/nginx-staging.conf crm/deploy/provision-nanobot-workspaces.sh crm/deploy/verify-whatsapp.sh "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/"
+          "${SCP[@]}" -r crm/ola/nanobot-workspace "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/"
           "${SCP[@]}" crm/scripts/smoke-prod.sh "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/"
           "${SCP[@]}" nanobot/docker-compose.yml nanobot/docker-compose.deploy.yml "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/nanobot/"
           "${SCP[@]}" rendered/crm/.env "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/crm/.env"
           "${SCP[@]}" rendered/crm/backend/.env "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/crm/backend/.env"
           "${SCP[@]}" rendered/nanobot-state/config.json "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/nanobot-state/config.json"
           "${SCP[@]}" rendered/nanobot.env "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/nanobot/.env"
+          "${SSH[@]}" "bash /opt/ola-staging/provision-nanobot-workspaces.sh /opt/ola-staging/nanobot-state /opt/ola-staging/nanobot-workspace"
           "${SSH[@]}" "sudo chown -R 1000:1000 /opt/ola-staging/nanobot-state"
 
           printf '%s' "$GHCR_TOKEN" | "${SSH[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
@@ -161,6 +173,7 @@ jobs:
           "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':8901/health >/dev/null"
           "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':3001/health >/dev/null"
           "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/health >/dev/null"
+          "${SSH[@]}" "MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-staging/verify-whatsapp.sh /opt/ola-staging/nanobot-state http://'$STAGING_TAILSCALE_IP':3001 nanobot-gateway"
 
           if ! "${SSH[@]}" "cd /opt/ola-staging/crm && DOMAINS=staging.olatech.ai TEST_EMAIL='$TEST_EMAIL' TEST_PASSWORD='$TEST_PASSWORD' MCP_HOST='$STAGING_TAILSCALE_IP' MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-staging/smoke-prod.sh"; then
             if [[ "$previous_crm" =~ ^[0-9a-f]{40}$ && "$previous_bot" =~ ^[0-9a-f]{40}$ ]]; then
