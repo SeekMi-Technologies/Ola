@@ -163,16 +163,28 @@ jobs:
               NANOBOT_IMAGE_TAG='$bot_tag' docker compose -p ola-staging-nanobot -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-build"
           }
 
+          wait_for_health() {
+            local url="$1"
+            "${SSH[@]}" "for attempt in \$(seq 1 30); do
+              if curl --fail --silent --show-error --max-time 5 '$url' >/dev/null; then
+                exit 0;
+              fi;
+              sleep 2;
+            done;
+            echo 'Health check timed out: $url' >&2;
+            exit 1"
+          }
+
           deploy_pair "$CRM_SHA" "$NANOBOT_SHA"
 
           # Staging temporarily shares the development database. Verify access
           # without creating accounts, defaults, indexes, or other records.
           "${SSH[@]}" "cd /opt/ola-staging/crm && CRM_IMAGE_TAG='$CRM_SHA' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.staging.yml exec -T backend node -e \"require('dotenv').config();const m=require('mongoose');m.connect(process.env.DATABASE).then(async()=>{await m.connection.db.admin().ping();await m.disconnect()}).catch((e)=>{console.error('database connectivity check failed');process.exit(1)})\""
 
-          "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':8900/health >/dev/null"
-          "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':8901/health >/dev/null"
-          "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':3001/health >/dev/null"
-          "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/health >/dev/null"
+          wait_for_health "http://$STAGING_TAILSCALE_IP:8900/health"
+          wait_for_health "http://$STAGING_TAILSCALE_IP:8901/health"
+          wait_for_health "http://$STAGING_TAILSCALE_IP:3001/health"
+          wait_for_health "http://127.0.0.1:8080/health"
           "${SSH[@]}" "MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-staging/verify-whatsapp.sh /opt/ola-staging/nanobot-state http://'$STAGING_TAILSCALE_IP':3001 nanobot-gateway"
 
           if ! "${SSH[@]}" "cd /opt/ola-staging/crm && DOMAINS=staging.olatech.ai TEST_EMAIL='$TEST_EMAIL' TEST_PASSWORD='$TEST_PASSWORD' MCP_HOST='$STAGING_TAILSCALE_IP' MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-staging/smoke-prod.sh"; then

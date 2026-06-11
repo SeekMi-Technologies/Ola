@@ -151,6 +151,22 @@ jobs:
               NANOBOT_IMAGE_TAG='$1' docker compose -p nanobot -f docker-compose.yml -f docker-compose.deploy.yml pull;
               NANOBOT_IMAGE_TAG='$1' docker compose -p nanobot -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-build"
           }
+          wait_for_health() {
+            local tier="$1" url="$2"
+            if [ "$tier" = crm ]; then
+              remote=("${SSH1[@]}")
+            else
+              remote=("${SSH2[@]}")
+            fi
+            "${remote[@]}" "for attempt in \$(seq 1 30); do
+              if curl --fail --silent --show-error --max-time 5 '$url' >/dev/null; then
+                exit 0;
+              fi;
+              sleep 2;
+            done;
+            echo 'Health check timed out: $url' >&2;
+            exit 1"
+          }
           rollback() {
             echo "::warning::Production verification failed; restoring both tiers"
             if [[ "$previous_crm" =~ ^[0-9a-f]{40}$ && "$previous_bot" =~ ^[0-9a-f]{40}$ ]]; then
@@ -167,10 +183,10 @@ jobs:
           "${SSH2[@]}" 'systemctl stop nanobot.service nanobot-gateway.service nanobot-bridge.service nanobot-serve.service 2>/dev/null || true'
           deploy_bot "$NANOBOT_SHA"
 
-          "${SSH2[@]}" "curl --fail --silent --show-error --max-time 10 http://'$BOX2_TAILSCALE_IP':8900/health >/dev/null"
-          "${SSH2[@]}" "curl --fail --silent --show-error --max-time 10 http://'$BOX2_TAILSCALE_IP':8901/health >/dev/null"
-          "${SSH2[@]}" "curl --fail --silent --show-error --max-time 10 http://'$BOX2_TAILSCALE_IP':3001/health >/dev/null"
-          "${SSH1[@]}" 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1:80/health >/dev/null'
+          wait_for_health bot "http://$BOX2_TAILSCALE_IP:8900/health"
+          wait_for_health bot "http://$BOX2_TAILSCALE_IP:8901/health"
+          wait_for_health bot "http://$BOX2_TAILSCALE_IP:3001/health"
+          wait_for_health crm "http://127.0.0.1:80/health"
           "${SSH2[@]}" "MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-production/verify-whatsapp.sh /opt/ola-production/nanobot-state http://'$BOX2_TAILSCALE_IP':3001 nanobot-gateway"
           "${SSH1[@]}" "cd /opt/ola-production/crm && DOMAINS='app.olajob.cn app.olatech.ai' TEST_EMAIL='$TEST_EMAIL' TEST_PASSWORD='$TEST_PASSWORD' MCP_HOST='$BOX1_TAILSCALE_IP' MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-production/smoke-prod.sh"
 
