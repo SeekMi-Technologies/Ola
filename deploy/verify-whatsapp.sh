@@ -11,8 +11,11 @@ if ! jq -e '.channels.whatsapp.enabled == true' "$config" >/dev/null; then
 fi
 
 mapfile -t admin_ids < <(
-  find "$state_dir/wa" -mindepth 2 -maxdepth 2 -type d -name auth -printf '%h\n' |
-    sed 's#.*/##' |
+  while IFS= read -r auth_dir; do
+    if find "$auth_dir" -type f -print -quit | grep -q .; then
+      basename "$(dirname "$auth_dir")"
+    fi
+  done < <(find "$state_dir/wa" -mindepth 2 -maxdepth 2 -type d -name auth) |
     grep -E '^[a-f0-9]{24}$' |
     sort -u
 )
