@@ -1,0 +1,15 @@
+services:
+  backend:
+    image: ghcr.io/seekmi-technologies/ola-backend:${CRM_IMAGE_TAG:?CRM_IMAGE_TAG is required}
+    pull_policy: always
+    build: !reset null
+
+  mcp:
+    image: ghcr.io/seekmi-technologies/ola-backend:${CRM_IMAGE_TAG:?CRM_IMAGE_TAG is required}
+    pull_policy: always
+    build: !reset null
+
+  frontend:
+    image: ghcr.io/seekmi-technologies/ola-frontend:${CRM_IMAGE_TAG:?CRM_IMAGE_TAG is required}
+    pull_policy: always
+    build: !reset null

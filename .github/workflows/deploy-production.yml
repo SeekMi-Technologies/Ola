@@ -1,0 +1,182 @@
+name: Promote Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      crm_sha:
+        description: Exact 40-character Ola SHA promoted from staging
+        required: true
+      nanobot_sha:
+        description: Exact 40-character Ola_bot SHA promoted from staging
+        required: true
+
+concurrency:
+  group: ola-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 35
+    env:
+      CRM_SHA: ${{ inputs.crm_sha }}
+      NANOBOT_SHA: ${{ inputs.nanobot_sha }}
+    steps:
+      - name: Validate immutable release identifiers
+        run: |
+          [[ "$CRM_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid CRM SHA"; exit 1; }
+          [[ "$NANOBOT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid nanobot SHA"; exit 1; }
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Require exact staging last-green pair
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+        run: |
+          set -euo pipefail
+          release="$(ssh -i ~/.ssh/deploy_key "$STAGING_USER@$STAGING_HOST" \
+            'cat /opt/ola-staging/last-green.env')"
+          test "$(printf '%s\n' "$release" | sed -n 's/^CRM_SHA=//p')" = "$CRM_SHA"
+          test "$(printf '%s\n' "$release" | sed -n 's/^NANOBOT_SHA=//p')" = "$NANOBOT_SHA"
+
+      - name: Checkout exact release definitions
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.crm_sha }}
+          path: crm
+
+      - name: Checkout exact nanobot release definitions
+        uses: actions/checkout@v4
+        with:
+          repository: SeekMi-Technologies/Ola_bot
+          ref: ${{ inputs.nanobot_sha }}
+          path: nanobot
+
+      - name: Validate production database isolation
+        env:
+          DEVELOPMENT_DATABASE: ${{ secrets.DEVELOPMENT_DATABASE }}
+          STAGING_DATABASE: ${{ secrets.STAGING_DATABASE }}
+          PRODUCTION_DATABASE: ${{ secrets.PRODUCTION_DATABASE }}
+        run: >-
+          node crm/deploy/db-fingerprint.js
+          --allow-equal=DEVELOPMENT_DATABASE,STAGING_DATABASE
+          DEVELOPMENT_DATABASE STAGING_DATABASE PRODUCTION_DATABASE
+
+      - name: Render protected production configuration
+        env:
+          BACKEND_ENV_B64: ${{ secrets.PRODUCTION_BACKEND_ENV_B64 }}
+          ROOT_ENV_B64: ${{ secrets.PRODUCTION_ROOT_ENV_B64 }}
+          NANOBOT_CONFIG_B64: ${{ secrets.PRODUCTION_NANOBOT_CONFIG_B64 }}
+          NANOBOT_ENV_B64: ${{ secrets.PRODUCTION_NANOBOT_ENV_B64 }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 rendered/crm/backend rendered/nanobot-state
+          printf '%s' "$BACKEND_ENV_B64" | base64 --decode > rendered/crm/backend/.env
+          printf '%s' "$ROOT_ENV_B64" | base64 --decode > rendered/crm/.env
+          printf '%s' "$NANOBOT_CONFIG_B64" | base64 --decode > rendered/nanobot-state/config.json
+          printf '%s' "$NANOBOT_ENV_B64" | base64 --decode > rendered/nanobot.env
+          node -e '
+            const fs = require("fs");
+            const path = "rendered/nanobot-state/config.json";
+            const config = JSON.parse(fs.readFileSync(path, "utf8"));
+            config.channels ??= {};
+            config.channels.whatsapp ??= {};
+            config.channels.whatsapp.enabled = true;
+            config.channels.whatsapp.bridgeUrl = "ws://nanobot-bridge:3001";
+            fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
+          '
+          chmod 600 rendered/crm/backend/.env rendered/crm/.env rendered/nanobot-state/config.json rendered/nanobot.env
+
+      - name: Deploy both tiers and rollback atomically on failure
+        env:
+          BOX1_HOST: ${{ secrets.PRODUCTION_BOX1_HOST }}
+          BOX1_USER: ${{ secrets.PRODUCTION_BOX1_USER }}
+          BOX2_HOST: ${{ secrets.PRODUCTION_BOX2_HOST }}
+          BOX2_USER: ${{ secrets.PRODUCTION_BOX2_USER }}
+          BOX1_TAILSCALE_IP: ${{ secrets.PRODUCTION_BOX1_TAILSCALE_IP }}
+          BOX2_TAILSCALE_IP: ${{ secrets.PRODUCTION_BOX2_TAILSCALE_IP }}
+          GHCR_USER: ${{ secrets.GHCR_PULL_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          TEST_EMAIL: ${{ secrets.PRODUCTION_TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.PRODUCTION_TEST_PASSWORD }}
+          MCP_SERVICE_TOKEN: ${{ secrets.PRODUCTION_MCP_SERVICE_TOKEN }}
+        run: |
+          set -euo pipefail
+          SSH1=(ssh -i ~/.ssh/deploy_key "$BOX1_USER@$BOX1_HOST")
+          SSH2=(ssh -i ~/.ssh/deploy_key "$BOX2_USER@$BOX2_HOST")
+          SCP=(scp -i ~/.ssh/deploy_key)
+
+          "${SSH1[@]}" 'install -d -m 755 /opt/ola-production/crm/backend /opt/ola-production'
+          "${SSH2[@]}" 'install -d -m 755 /opt/ola-production/nanobot /opt/ola-production/nanobot-state'
+          "${SCP[@]}" crm/docker-compose.yml crm/docker-compose.deploy.yml "$BOX1_USER@$BOX1_HOST:/opt/ola-production/crm/"
+          "${SCP[@]}" crm/scripts/smoke-prod.sh "$BOX1_USER@$BOX1_HOST:/opt/ola-production/"
+          "${SCP[@]}" crm/deploy/provision-nanobot-workspaces.sh crm/deploy/verify-whatsapp.sh "$BOX2_USER@$BOX2_HOST:/opt/ola-production/"
+          "${SCP[@]}" -r crm/ola/nanobot-workspace "$BOX2_USER@$BOX2_HOST:/opt/ola-production/"
+          "${SCP[@]}" rendered/crm/.env "$BOX1_USER@$BOX1_HOST:/opt/ola-production/crm/.env"
+          "${SCP[@]}" rendered/crm/backend/.env "$BOX1_USER@$BOX1_HOST:/opt/ola-production/crm/backend/.env"
+          "${SCP[@]}" nanobot/docker-compose.yml nanobot/docker-compose.deploy.yml "$BOX2_USER@$BOX2_HOST:/opt/ola-production/nanobot/"
+          "${SCP[@]}" rendered/nanobot-state/config.json "$BOX2_USER@$BOX2_HOST:/opt/ola-production/nanobot-state/config.json"
+          "${SCP[@]}" rendered/nanobot.env "$BOX2_USER@$BOX2_HOST:/opt/ola-production/nanobot/.env"
+
+          "${SSH2[@]}" 'if [ -d /root/.nanobot ] && [ ! -e /opt/ola-production/nanobot-state/.state-imported ]; then cp -an /root/.nanobot/. /opt/ola-production/nanobot-state/; touch /opt/ola-production/nanobot-state/.state-imported; fi; bash /opt/ola-production/provision-nanobot-workspaces.sh /opt/ola-production/nanobot-state /opt/ola-production/nanobot-workspace; chown -R 1000:1000 /opt/ola-production/nanobot-state'
+          printf '%s' "$GHCR_TOKEN" | "${SSH1[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+          printf '%s' "$GHCR_TOKEN" | "${SSH2[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+
+          previous="$("${SSH1[@]}" 'cat /opt/ola-production/current.env 2>/dev/null || true')"
+          previous_crm="$(printf '%s\n' "$previous" | sed -n 's/^CRM_SHA=//p')"
+          previous_bot="$(printf '%s\n' "$previous" | sed -n 's/^NANOBOT_SHA=//p')"
+
+          deploy_crm() {
+            "${SSH1[@]}" "set -e; cd /opt/ola-production/crm;
+              CRM_IMAGE_TAG='$1' docker compose -p crm -f docker-compose.yml -f docker-compose.deploy.yml pull;
+              CRM_IMAGE_TAG='$1' docker compose -p crm -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-build"
+          }
+          deploy_bot() {
+            "${SSH2[@]}" "set -e; cd /opt/ola-production/nanobot;
+              NANOBOT_IMAGE_TAG='$1' docker compose -p nanobot -f docker-compose.yml -f docker-compose.deploy.yml pull;
+              NANOBOT_IMAGE_TAG='$1' docker compose -p nanobot -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-build"
+          }
+          rollback() {
+            echo "::warning::Production verification failed; restoring both tiers"
+            if [[ "$previous_crm" =~ ^[0-9a-f]{40}$ && "$previous_bot" =~ ^[0-9a-f]{40}$ ]]; then
+              deploy_crm "$previous_crm" || true
+              deploy_bot "$previous_bot" || true
+            else
+              "${SSH1[@]}" 'cd /app/crm && docker compose -p crm up -d --no-build' || true
+              "${SSH2[@]}" 'cd /opt/ola-production/nanobot && docker compose -p nanobot down; systemctl start nanobot.service nanobot-gateway.service nanobot-bridge.service' || true
+            fi
+          }
+          trap rollback ERR
+
+          deploy_crm "$CRM_SHA"
+          "${SSH2[@]}" 'systemctl stop nanobot.service nanobot-gateway.service nanobot-bridge.service nanobot-serve.service 2>/dev/null || true'
+          deploy_bot "$NANOBOT_SHA"
+
+          "${SSH2[@]}" "curl --fail --silent --show-error --max-time 10 http://'$BOX2_TAILSCALE_IP':8900/health >/dev/null"
+          "${SSH2[@]}" "curl --fail --silent --show-error --max-time 10 http://'$BOX2_TAILSCALE_IP':8901/health >/dev/null"
+          "${SSH2[@]}" "curl --fail --silent --show-error --max-time 10 http://'$BOX2_TAILSCALE_IP':3001/health >/dev/null"
+          "${SSH1[@]}" 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1:80/health >/dev/null'
+          "${SSH2[@]}" "MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-production/verify-whatsapp.sh /opt/ola-production/nanobot-state http://'$BOX2_TAILSCALE_IP':3001 nanobot-gateway"
+          "${SSH1[@]}" "cd /opt/ola-production/crm && DOMAINS='app.olajob.cn app.olatech.ai' TEST_EMAIL='$TEST_EMAIL' TEST_PASSWORD='$TEST_PASSWORD' MCP_HOST='$BOX1_TAILSCALE_IP' MCP_SERVICE_TOKEN='$MCP_SERVICE_TOKEN' bash /opt/ola-production/smoke-prod.sh"
+
+          trap - ERR
+          release="$(printf 'CRM_SHA=%s\nNANOBOT_SHA=%s\n' "$CRM_SHA" "$NANOBOT_SHA")"
+          printf '%s' "$release" | "${SSH1[@]}" 'cat > /opt/ola-production/current.env'
+          printf '%s' "$release" | "${SSH2[@]}" 'cat > /opt/ola-production/current.env'
+          "${SSH1[@]}" 'systemctl disable --now olaclaw-backend.service pm2-root.service postgresql.service 2>/dev/null || true'
+          "${SSH2[@]}" 'systemctl disable nanobot.service nanobot-gateway.service nanobot-bridge.service nanobot-serve.service pm2-root.service postgresql.service 2>/dev/null || true'

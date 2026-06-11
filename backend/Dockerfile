@@ -17,8 +17,8 @@ RUN npm config set registry https://registry.npmmirror.com && \
 
 COPY package*.json ./
 
-# 安装依赖
-RUN npm install
+# Install exactly the dependency graph committed in package-lock.json.
+RUN npm ci
 
 COPY . .
 

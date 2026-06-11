@@ -50,10 +50,37 @@ fi
 # prod systemd EnvironmentFile= / docker-compose env_file: pattern.
 set -a
 source "$CRM_DIR/backend/.env"
+# #351 — capture the dev DATABASE before SERVERS.env (prod canonical, defines
+# its own DATABASE) overrides it in the shell env. dotenv never overrides an
+# existing env var, so a leaked prod URI here would silently win over
+# backend/.env inside every child process.
+DEV_DATABASE="${DATABASE:-}"
 if [ -f "$CRM_DIR/.secrets/SERVERS.env" ]; then
   source "$CRM_DIR/.secrets/SERVERS.env"
 fi
 set +a
+
+# #351 — DB isolation guard. Re-pin DATABASE to the backend/.env value, then
+# refuse to start if it still points at the prod host/db from SERVERS.env.
+# Machines without .secrets/ (no prod secrets present) skip the comparison.
+_db_fingerprint() {
+  printf '%s' "$1" | tr -d "'\"" | sed -E 's#^mongodb(\+srv)?://##; s#^[^@/]+@##; s#\?.*$##'
+}
+if [ -z "$DEV_DATABASE" ]; then
+  echo -e "${RED}REFUSING TO START: backend/.env does not set DATABASE.${NC}"
+  echo -e "${YELLOW}Set DATABASE to the Ola-Dev Atlas URI (see ola/SETUP.md and #351).${NC}"
+  exit 1
+fi
+export DATABASE="$DEV_DATABASE"
+if [ -f "$CRM_DIR/.secrets/SERVERS.env" ]; then
+  PROD_DATABASE=$(grep -E '^DATABASE=' "$CRM_DIR/.secrets/SERVERS.env" | tail -1 | cut -d= -f2- || true)
+  if [ -n "$PROD_DATABASE" ] && [ "$(_db_fingerprint "$DEV_DATABASE")" = "$(_db_fingerprint "$PROD_DATABASE")" ]; then
+    echo -e "${RED}REFUSING TO START: backend/.env DATABASE points at the PRODUCTION database${NC}"
+    echo -e "${RED}($(_db_fingerprint "$PROD_DATABASE") — same host/db as .secrets/SERVERS.env).${NC}"
+    echo -e "${YELLOW}Point DATABASE at the Ola-Dev cluster instead (see ola/SETUP.md and #351).${NC}"
+    exit 1
+  fi
+fi
 
 # #266 Item 3 — fail-fast if backend/.env declares OLA_ENV=prod. Local dev
 # must never point at the production Atlas cluster: cross-env writes pollute
@@ -219,7 +246,7 @@ if [ -d "$NANOBOT_DIR" ]; then
       echo -e " ${RED}FAILED${NC} — check /tmp/ola-wa-bridge-build.log"
     fi
   fi
-  mkdir -p "$HOME/.nanobot/wa/699245d5c692e668ea7ab155/auth"
+  mkdir -p "$HOME/.nanobot/wa/6a28ac13a144dca927a5bfc1/auth"
   cd "$NANOBOT_DIR/bridge"
   AUTH_ROOT="$HOME/.nanobot/wa" nohup node dist/index.js > /tmp/ola-wa-bridge.log 2>&1 &
   WA_BRIDGE_PID=$!
@@ -263,7 +290,7 @@ if [ -n "$WA_BRIDGE_PID" ] && [ -f "$HOME/.nanobot/wa/bridge.port" ]; then
   if kill -0 "$WA_BRIDGE_PID" 2>/dev/null; then
     # Default dev admin (admin@admin.com): if creds.json exists, Baileys auto-reconnects
     # silently; if missing, user needs to scan QR from the bridge log.
-    DEFAULT_ADMIN_AUTH="$HOME/.nanobot/wa/699245d5c692e668ea7ab155/auth/creds.json"
+    DEFAULT_ADMIN_AUTH="$HOME/.nanobot/wa/6a28ac13a144dca927a5bfc1/auth/creds.json"
     if [ -f "$DEFAULT_ADMIN_AUTH" ]; then
       WA_STATUS_NOTE="admin@admin.com auto-reconnect (creds.json present)"
     else

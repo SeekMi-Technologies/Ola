@@ -16,6 +16,8 @@
     "sendProgress": true,
     "sendToolHints": false,
     "sendMaxRetries": 3,
+    "transcription_provider": "openai",
+    "transcription_language": null,
     "dingtalk": {
       "enabled": false,
       "clientId": "",
@@ -156,7 +158,9 @@
       "bridgeUrl": "ws://localhost:3001",
       "bridgeToken": "",
       "allowFrom": ["*"],
-      "groupPolicy": "open"
+      "groupPolicy": "open",
+      "crmUploadUrl": "http://127.0.0.1:8889",
+      "crmServiceToken": "${MCP_SERVICE_TOKEN}"
     }
   },
   "providers": {
@@ -176,7 +180,7 @@
       "extraHeaders": null
     },
     "openai": {
-      "apiKey": "",
+      "apiKey": "${OPENAI_API_KEY}",
       "apiBase": null,
       "extraHeaders": null
     },

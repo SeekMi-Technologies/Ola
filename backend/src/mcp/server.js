@@ -213,6 +213,75 @@ async function main() {
   app.get('/mcp', methodNotAllowed);
   app.delete('/mcp', methodNotAllowed);
 
+  // ── POST /internal/upload-audio ──────────────────────────────────────
+  // Internal endpoint for nanobot WhatsApp channel to upload inbound audio
+  // into CRM File storage + trigger auto-transcription. Auth: Bearer token
+  // (same MCP_SERVICE_TOKEN) + X-Acting-As for admin identity.
+  // Uses shared processUpload() from fileController — single source of truth
+  // for dedup, disk write, File/Job doc creation, and transcription kick.
+  const multer = require('multer');
+  const processUpload = require('@/controllers/appControllers/fileController/processUpload');
+
+  const internalMulter = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB for audio
+  }).single('file');
+
+  app.post(
+    '/internal/upload-audio',
+    requireAuth,
+    async (req, res, next) => {
+      // Resolve acting admin via decideActingAdmin (same function used by
+      // POST /mcp). Rejects if X-Acting-As is missing — this endpoint is
+      // only called by nanobot (multi-tenant), which always sends the header.
+      const decision = await decideActingAdmin(req.headers['x-acting-as'], 'internal/upload-audio');
+      if (!decision.ok) {
+        return res.status(decision.status).json({
+          ok: false,
+          code: decision.code,
+          message: decision.message,
+        });
+      }
+      req.admin = decision.actingAdmin;
+      next();
+    },
+    (req, res, next) => {
+      internalMulter(req, res, (err) => {
+        if (err) return res.status(400).json({ ok: false, code: 'VALIDATION', message: err.message });
+        next();
+      });
+    },
+    async (req, res) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({ ok: false, code: 'VALIDATION', message: 'Missing file field' });
+        }
+
+        const result = await processUpload(req.file, req.admin, { transcribeVideo: true });
+        const { fileDoc, transcriptionJobId, deduped } = result;
+
+        if (deduped) {
+          console.log(`[internal/upload-audio] dedup: ${fileDoc._id} for admin ${req.admin._id} (${req.file.size} bytes)`);
+        } else {
+          console.log(`[internal/upload-audio] ${fileDoc._id} uploaded for admin ${req.admin._id} (${req.file.size} bytes)`);
+        }
+
+        return res.status(200).json({
+          ok: true,
+          fileId: fileDoc._id,
+          originalName: fileDoc.originalName,
+          sizeBytes: fileDoc.sizeBytes,
+          mimeType: fileDoc.mimeType,
+          transcriptionJobId,
+          deduped,
+        });
+      } catch (err) {
+        console.error('[internal/upload-audio] error:', err);
+        return res.status(500).json({ ok: false, code: 'INTERNAL', message: err.message });
+      }
+    }
+  );
+
   // 全局 Express error handler —— 兜底任何未捕获的同步/异步异常
   // 必须放在所有路由之后，签名 4 个参数 Express 才识别为 error handler
   // eslint-disable-next-line no-unused-vars
