@@ -100,8 +100,8 @@ jobs:
           BOX2_USER: ${{ secrets.PRODUCTION_BOX2_USER }}
           BOX1_TAILSCALE_IP: ${{ secrets.PRODUCTION_BOX1_TAILSCALE_IP }}
           BOX2_TAILSCALE_IP: ${{ secrets.PRODUCTION_BOX2_TAILSCALE_IP }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ secrets.GHCR_PULL_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           TEST_EMAIL: ${{ secrets.PRODUCTION_TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.PRODUCTION_TEST_PASSWORD }}
           MCP_SERVICE_TOKEN: ${{ secrets.PRODUCTION_MCP_SERVICE_TOKEN }}

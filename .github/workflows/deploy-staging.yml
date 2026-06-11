@@ -109,8 +109,8 @@ jobs:
         env:
           STAGING_HOST: ${{ secrets.STAGING_HOST }}
           STAGING_USER: ${{ secrets.STAGING_USER }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ secrets.GHCR_PULL_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           CRM_SHA: ${{ steps.release.outputs.crm_sha }}
           NANOBOT_SHA: ${{ steps.release.outputs.nanobot_sha }}
           TEST_EMAIL: ${{ secrets.STAGING_TEST_EMAIL }}

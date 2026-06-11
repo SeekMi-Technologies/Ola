@@ -32,8 +32,8 @@ Ola_bot also needs `OLA_DEPLOY_TOKEN`, scoped to dispatch workflows in the Ola r
 
 Base64 configuration secrets are decoded only into mode-600 files. MongoDB URI values are
 parsed structurally; workflows never print complete URIs or credentials.
-GHCR pulls use the workflow's short-lived `GITHUB_TOKEN` with `packages: read`; no persistent
-package token is stored.
+GHCR pulls use a `read:packages`-only token stored as `GHCR_PULL_TOKEN`. It expires on
+July 11, 2026 and must be rotated before that date.
 
 ## Temporary staging database policy
 
