@@ -6,12 +6,7 @@ bridge_url=${2:?usage: verify-whatsapp.sh STATE_DIR BRIDGE_URL GATEWAY_CONTAINER
 gateway_container=${3:?usage: verify-whatsapp.sh STATE_DIR BRIDGE_URL GATEWAY_CONTAINER}
 config="$state_dir/config.json"
 
-enabled=$(node -e '
-  const config = require(process.argv[1]);
-  process.stdout.write(String(config.channels?.whatsapp?.enabled === true));
-' "$config")
-
-if [ "$enabled" != true ]; then
+if ! jq -e '.channels.whatsapp.enabled == true' "$config" >/dev/null; then
   echo "WhatsApp verification failed: channels.whatsapp.enabled is not true" >&2
   exit 1
 fi
@@ -39,13 +34,11 @@ for admin_id in "${admin_ids[@]}"; do
       -H "Authorization: Bearer $token" \
       "$bridge_url/wa/$admin_id/status"
   )
-  node -e '
-    const status = JSON.parse(process.argv[1]).status;
-    if (status !== "connected") {
-      console.error(`WhatsApp verification failed: bridge status is ${status || "missing"}`);
-      process.exit(1);
-    }
-  ' "$status"
+  bridge_status=$(jq -r '.status // "missing"' <<<"$status")
+  if [ "$bridge_status" != connected ]; then
+    echo "WhatsApp verification failed: bridge status is $bridge_status" >&2
+    exit 1
+  fi
 
   if ! docker logs --since 10m "$gateway_container" 2>&1 |
     grep -F "[$admin_id] Connected to WhatsApp bridge" >/dev/null; then
