@@ -72,7 +72,10 @@ jobs:
           DEVELOPMENT_DATABASE: ${{ secrets.DEVELOPMENT_DATABASE }}
           STAGING_DATABASE: ${{ secrets.STAGING_DATABASE }}
           PRODUCTION_DATABASE: ${{ secrets.PRODUCTION_DATABASE }}
-        run: node crm/deploy/db-fingerprint.js DEVELOPMENT_DATABASE STAGING_DATABASE PRODUCTION_DATABASE
+        run: >-
+          node crm/deploy/db-fingerprint.js
+          --allow-equal=DEVELOPMENT_DATABASE,STAGING_DATABASE
+          DEVELOPMENT_DATABASE STAGING_DATABASE PRODUCTION_DATABASE
 
       - name: Render protected production configuration
         env:

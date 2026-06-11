@@ -45,3 +45,36 @@ test('accepts three distinct environments', () => {
     }
   );
 });
+
+test('allows only the explicitly approved development and staging match', () => {
+  assert.deepEqual(
+    assertDistinct(
+      [
+        ['development', 'mongodb+srv://a:b@dev.example/oladev'],
+        ['staging', 'mongodb+srv://c:d@dev.example/oladev?retryWrites=true'],
+        ['production', 'mongodb+srv://a:b@prod.example/olaprod'],
+      ],
+      [['development', 'staging']]
+    ),
+    {
+      development: 'dev.example/oladev',
+      staging: 'dev.example/oladev',
+      production: 'prod.example/olaprod',
+    }
+  );
+});
+
+test('still rejects production matching an allowed shared database', () => {
+  assert.throws(
+    () =>
+      assertDistinct(
+        [
+          ['development', 'mongodb+srv://a:b@dev.example/oladev'],
+          ['staging', 'mongodb+srv://c:d@dev.example/oladev'],
+          ['production', 'mongodb+srv://e:f@dev.example/oladev'],
+        ],
+        [['development', 'staging']]
+      ),
+    /production database matches development/
+  );
+});

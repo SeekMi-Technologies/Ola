@@ -85,7 +85,10 @@ jobs:
           DEVELOPMENT_DATABASE: ${{ secrets.DEVELOPMENT_DATABASE }}
           STAGING_DATABASE: ${{ secrets.STAGING_DATABASE }}
           PRODUCTION_DATABASE: ${{ secrets.PRODUCTION_DATABASE }}
-        run: node crm/deploy/db-fingerprint.js DEVELOPMENT_DATABASE STAGING_DATABASE PRODUCTION_DATABASE
+        run: >-
+          node crm/deploy/db-fingerprint.js
+          --allow-equal=DEVELOPMENT_DATABASE,STAGING_DATABASE
+          DEVELOPMENT_DATABASE STAGING_DATABASE PRODUCTION_DATABASE
 
       - name: Render protected configuration
         env:
@@ -119,7 +122,8 @@ jobs:
           SSH=(ssh -i ~/.ssh/deploy_key "$STAGING_USER@$STAGING_HOST")
           SCP=(scp -i ~/.ssh/deploy_key)
           "${SSH[@]}" 'sudo install -d -m 755 /opt/ola-staging/crm/backend /opt/ola-staging/nanobot /opt/ola-staging/nanobot-state && sudo chown -R "$USER":"$USER" /opt/ola-staging'
-          "${SCP[@]}" crm/docker-compose.yml crm/docker-compose.deploy.yml "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/crm/"
+          "${SCP[@]}" crm/docker-compose.yml crm/docker-compose.deploy.yml crm/docker-compose.staging.yml "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/crm/"
+          "${SCP[@]}" crm/deploy/nginx-staging.conf "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/"
           "${SCP[@]}" crm/scripts/smoke-prod.sh "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/"
           "${SCP[@]}" nanobot/docker-compose.yml nanobot/docker-compose.deploy.yml "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/nanobot/"
           "${SCP[@]}" rendered/crm/.env "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/crm/.env"
@@ -136,9 +140,12 @@ jobs:
           deploy_pair() {
             local crm_tag="$1" bot_tag="$2"
             "${SSH[@]}" "set -e;
+              sudo install -m 644 /opt/ola-staging/nginx-staging.conf /etc/nginx/conf.d/ola-staging.conf;
+              sudo nginx -t;
+              sudo systemctl reload nginx;
               cd /opt/ola-staging/crm;
-              CRM_IMAGE_TAG='$crm_tag' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml pull;
-              CRM_IMAGE_TAG='$crm_tag' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-build;
+              CRM_IMAGE_TAG='$crm_tag' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.staging.yml pull;
+              CRM_IMAGE_TAG='$crm_tag' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.staging.yml up -d --no-build;
               cd /opt/ola-staging/nanobot;
               NANOBOT_IMAGE_TAG='$bot_tag' docker compose -p ola-staging-nanobot -f docker-compose.yml -f docker-compose.deploy.yml pull;
               NANOBOT_IMAGE_TAG='$bot_tag' docker compose -p ola-staging-nanobot -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-build"
@@ -146,12 +153,9 @@ jobs:
 
           deploy_pair "$CRM_SHA" "$NANOBOT_SHA"
 
-          admin_count="$("${SSH[@]}" "cd /opt/ola-staging/crm && CRM_IMAGE_TAG='$CRM_SHA' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml exec -T backend node -e \"require('dotenv').config();const m=require('mongoose');m.connect(process.env.DATABASE).then(async()=>{const A=require('./src/models/coreModels/Admin');console.log(await A.countDocuments({removed:{\\\$ne:true}}));await m.disconnect()})\"")"
-          if [ "${admin_count##*$'\n'}" = 0 ]; then
-            "${SSH[@]}" "cd /opt/ola-staging/crm && CRM_IMAGE_TAG='$CRM_SHA' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml exec -T backend npm run setup"
-          else
-            "${SSH[@]}" "cd /opt/ola-staging/crm && CRM_IMAGE_TAG='$CRM_SHA' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml exec -T backend npm run add-admin"
-          fi
+          # Staging temporarily shares the development database. Verify access
+          # without creating accounts, defaults, indexes, or other records.
+          "${SSH[@]}" "cd /opt/ola-staging/crm && CRM_IMAGE_TAG='$CRM_SHA' docker compose -p ola-staging-crm -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.staging.yml exec -T backend node -e \"require('dotenv').config();const m=require('mongoose');m.connect(process.env.DATABASE).then(async()=>{await m.connection.db.admin().ping();await m.disconnect()}).catch((e)=>{console.error('database connectivity check failed');process.exit(1)})\""
 
           "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':8900/health >/dev/null"
           "${SSH[@]}" "curl --fail --silent --show-error --max-time 10 http://'$STAGING_TAILSCALE_IP':8901/health >/dev/null"

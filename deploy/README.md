@@ -34,6 +34,18 @@ Ola_bot also needs `OLA_DEPLOY_TOKEN`, scoped to dispatch workflows in the Ola r
 Base64 configuration secrets are decoded only into mode-600 files. MongoDB URI values are
 parsed structurally; workflows never print complete URIs or credentials.
 
+## Temporary staging database policy
+
+By leadership decision on June 11, 2026, staging temporarily uses the development database.
+Set `STAGING_DATABASE` to the same URI as `DEVELOPMENT_DATABASE`. The validation script permits
+only that named pair to match; production must remain different from both.
+
+Because the database is shared, staging CD performs a connectivity check only. It must not run
+`setup`, `add-admin`, seeds, migrations that rewrite data, destructive smoke tests, or cleanup
+jobs. Staging smoke tests use an existing development test account and should create uniquely
+prefixed disposable records where writes are unavoidable. Move staging to a dedicated database
+before enabling destructive or migration testing.
+
 ## Server layout
 
 - Box 1: production CRM frontend, backend, and MCP.
@@ -45,6 +57,9 @@ parsed structurally; workflows never print complete URIs or credentials.
 
 Run `deploy/bootstrap-staging.sh` once on Box 6, then authenticate Tailscale. Add the proxied
 Cloudflare record `staging.olatech.ai -> 47.254.40.1` and use Full (strict) origin TLS.
+Install a Cloudflare Origin Certificate at `/etc/nginx/tls/staging.olatech.ai.pem` and its
+mode-600 private key at `/etc/nginx/tls/staging.olatech.ai.key`. The deployment workflow
+validates and reloads `deploy/nginx-staging.conf`.
 
 ## Cleanup
 

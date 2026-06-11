@@ -8,11 +8,11 @@ fi
 if command -v apt-get >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y ca-certificates curl git jq logrotate
+  apt-get install -y ca-certificates curl git jq logrotate nginx
 elif command -v dnf >/dev/null 2>&1; then
-  dnf install -y ca-certificates curl git jq logrotate
+  dnf install -y ca-certificates curl git jq logrotate nginx
 elif command -v yum >/dev/null 2>&1; then
-  yum install -y ca-certificates curl git jq logrotate
+  yum install -y ca-certificates curl git jq logrotate nginx
 else
   echo "Unsupported package manager" >&2
   exit 1
@@ -56,6 +56,8 @@ fi
 
 install -d -m 755 /opt/ola-staging/crm/backend /opt/ola-staging/nanobot
 install -d -m 700 -o 1000 -g 1000 /opt/ola-staging/nanobot-state
+install -d -m 700 /etc/nginx/tls
+systemctl enable nginx
 
 cat >/etc/logrotate.d/ola-containers <<'EOF'
 /var/lib/docker/containers/*/*.log {
@@ -80,4 +82,4 @@ cat >/etc/docker/daemon.json <<'EOF'
 EOF
 systemctl restart docker
 
-echo "Bootstrap complete. Authenticate Tailscale with: sudo tailscale up"
+echo "Bootstrap complete. Install the staging origin certificate, then authenticate Tailscale with: sudo tailscale up"

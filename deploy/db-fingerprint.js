@@ -18,23 +18,52 @@ function fingerprint(uri) {
   return `${parsed.hostname.toLowerCase()}/${database.toLowerCase()}`;
 }
 
-function assertDistinct(entries) {
+function pairKey(left, right) {
+  return [left, right].sort().join('\0');
+}
+
+function assertDistinct(entries, allowedEqualPairs = []) {
+  const allowed = new Set(allowedEqualPairs.map(([left, right]) => pairKey(left, right)));
   const seen = new Map();
   for (const [name, uri] of entries) {
     const value = fingerprint(uri);
     if (seen.has(value)) {
-      throw new Error(`${name} database matches ${seen.get(value)} (${value})`);
+      const other = seen.get(value);
+      if (!allowed.has(pairKey(name, other))) {
+        throw new Error(`${name} database matches ${other} (${value})`);
+      }
+    } else {
+      seen.set(value, name);
     }
-    seen.set(value, name);
   }
-  return Object.fromEntries([...seen].map(([value, name]) => [name, value]));
+  return Object.fromEntries(entries.map(([name, uri]) => [name, fingerprint(uri)]));
 }
 
 if (require.main === module) {
   try {
-    const names = process.argv.slice(2);
+    const args = process.argv.slice(2);
+    const allowedEqualPairs = [];
+    const names = [];
+    for (const arg of args) {
+      if (arg.startsWith('--allow-equal=')) {
+        const pair = arg.slice('--allow-equal='.length).split(',');
+        if (pair.length !== 2 || pair.some((name) => !name)) {
+          throw new Error('--allow-equal requires two comma-separated environment variable names');
+        }
+        allowedEqualPairs.push(pair);
+      } else {
+        names.push(arg);
+      }
+    }
     if (names.length < 2) throw new Error('provide at least two environment variable names');
-    const result = assertDistinct(names.map((name) => [name, process.env[name]]));
+    const unknown = allowedEqualPairs.flat().filter((name) => !names.includes(name));
+    if (unknown.length) {
+      throw new Error(`allowed equality references unknown environment variable ${unknown[0]}`);
+    }
+    const result = assertDistinct(
+      names.map((name) => [name, process.env[name]]),
+      allowedEqualPairs
+    );
     for (const name of names) console.log(`${name}=${result[name]}`);
   } catch (error) {
     console.error(`database isolation check failed: ${error.message}`);
