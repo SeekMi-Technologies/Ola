@@ -102,6 +102,23 @@ WhatsApp inquiry → Agent extracts product needs → match `Merch` (by `serialN
 - **Deployment model:** Nanobot runs as a separate service alongside CRM (Docker Compose). CRM's `olaController` HTTP-proxies `/api/ola/chat` to NanoBot's serve endpoint (see commit `b07adb3`).
 - **Architecture inside `../nanobot/`:** `agent/` (loop, context, memory, skills, subagent, tools), `channels/` (13 channels incl. WhatsApp, WeChat, Email), `providers/` (OpenAI/Anthropic native SDKs after litellm was removed in v0.1.4), `bus/` `heartbeat/` `cron/` `skills/` `session/` `bridge/` (Node.js Baileys WhatsApp bridge).
 - **Integration design:** MCP is the planned standard interface — CRM backend exposes business actions as MCP tools that NanoBot can call. When touching this seam, design tool schemas carefully (strong types, no nullable surprises).
+
+### MCP Tools surface (auto-discovered from `backend/src/mcp/tools/`)
+
+Tools live in `crud/` and `compute/` subdirectories. The registry (`registry.js`) auto-discovers `.js` files and registers them on the McpServer instance. Each tool exports `{ name, description, inputSchema (Zod), handler }`.
+
+**File / Transcription tools** (`crud/file.js` + `compute/transcribe.js`):
+- `file.search` — List user's uploaded audio files with optional name/status filter
+- `file.get_transcript` — Read full transcript text for one File (must be done)
+- `file.transcription_status` — Lightweight status probe (no sidecar read)
+- `file.transcribe` — Trigger transcription for an audio/video file. Idempotent: returns cached transcript if done, 409 if processing, re-transcribes if failed. Rejects non-audio files with UNSUPPORTED_TYPE.
+
+**Status vocabulary** (collapsed set): `ready` (no job), `processing` (pending|running), `done`, `failed`.
+
+**WhatsApp voice transcription** (nanobot side):
+- Bridge (`nanobot/bridge/src/whatsapp.ts`) detects voice messages (audio/ogg + ptt), downloads audio to temp dir
+- Channel (`nanobot/nanobot/channels/whatsapp.py`) calls Whisper API (Groq/OpenAI) to transcribe, passes text to agent
+- Config via `nanobot.config.json`: `channels.transcription_provider` (top-level under channels), `channels.transcription_language`; API key resolved from `providers.<provider>.apiKey` (e.g. `providers.openai.apiKey`)
 - When working across both repos, state which side a change goes in **before** editing. A change in `../nanobot/` is not bound by Ola CRM's Node/Mongoose conventions but is bound by the same SDD discipline and "no silent errors" rule.
 
 ## Project

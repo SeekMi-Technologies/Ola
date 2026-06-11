@@ -6,3 +6,4 @@ notes.md
 .env.local
 
 *.pdf
+scripts/results/

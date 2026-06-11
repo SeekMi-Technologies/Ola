@@ -219,7 +219,7 @@ if [ -d "$NANOBOT_DIR" ]; then
       echo -e " ${RED}FAILED${NC} — check /tmp/ola-wa-bridge-build.log"
     fi
   fi
-  mkdir -p "$HOME/.nanobot/wa/699245d5c692e668ea7ab155/auth"
+  mkdir -p "$HOME/.nanobot/wa/6a28ac13a144dca927a5bfc1/auth"
   cd "$NANOBOT_DIR/bridge"
   AUTH_ROOT="$HOME/.nanobot/wa" nohup node dist/index.js > /tmp/ola-wa-bridge.log 2>&1 &
   WA_BRIDGE_PID=$!
@@ -263,7 +263,7 @@ if [ -n "$WA_BRIDGE_PID" ] && [ -f "$HOME/.nanobot/wa/bridge.port" ]; then
   if kill -0 "$WA_BRIDGE_PID" 2>/dev/null; then
     # Default dev admin (admin@admin.com): if creds.json exists, Baileys auto-reconnects
     # silently; if missing, user needs to scan QR from the bridge log.
-    DEFAULT_ADMIN_AUTH="$HOME/.nanobot/wa/699245d5c692e668ea7ab155/auth/creds.json"
+    DEFAULT_ADMIN_AUTH="$HOME/.nanobot/wa/6a28ac13a144dca927a5bfc1/auth/creds.json"
     if [ -f "$DEFAULT_ADMIN_AUTH" ]; then
       WA_STATUS_NOTE="admin@admin.com auto-reconnect (creds.json present)"
     else
