@@ -16,6 +16,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   promote:
@@ -99,8 +100,8 @@ jobs:
           BOX2_USER: ${{ secrets.PRODUCTION_BOX2_USER }}
           BOX1_TAILSCALE_IP: ${{ secrets.PRODUCTION_BOX1_TAILSCALE_IP }}
           BOX2_TAILSCALE_IP: ${{ secrets.PRODUCTION_BOX2_TAILSCALE_IP }}
-          GHCR_USER: ${{ secrets.GHCR_PULL_USER }}
-          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
           TEST_EMAIL: ${{ secrets.PRODUCTION_TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.PRODUCTION_TEST_PASSWORD }}
           MCP_SERVICE_TOKEN: ${{ secrets.PRODUCTION_MCP_SERVICE_TOKEN }}
@@ -121,10 +122,8 @@ jobs:
           "${SCP[@]}" rendered/nanobot.env "$BOX2_USER@$BOX2_HOST:/opt/ola-production/nanobot/.env"
 
           "${SSH2[@]}" 'if [ -d /root/.nanobot ] && [ ! -e /opt/ola-production/nanobot-state/.state-imported ]; then cp -an /root/.nanobot/. /opt/ola-production/nanobot-state/; touch /opt/ola-production/nanobot-state/.state-imported; fi; chown -R 1000:1000 /opt/ola-production/nanobot-state'
-          if [ -n "$GHCR_TOKEN" ]; then
-            printf '%s' "$GHCR_TOKEN" | "${SSH1[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
-            printf '%s' "$GHCR_TOKEN" | "${SSH2[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
-          fi
+          printf '%s' "$GHCR_TOKEN" | "${SSH1[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+          printf '%s' "$GHCR_TOKEN" | "${SSH2[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
 
           previous="$("${SSH1[@]}" 'cat /opt/ola-production/current.env 2>/dev/null || true')"
           previous_crm="$(printf '%s\n' "$previous" | sed -n 's/^CRM_SHA=//p')"

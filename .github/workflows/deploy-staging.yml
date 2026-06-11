@@ -22,6 +22,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   deploy:
@@ -108,8 +109,8 @@ jobs:
         env:
           STAGING_HOST: ${{ secrets.STAGING_HOST }}
           STAGING_USER: ${{ secrets.STAGING_USER }}
-          GHCR_USER: ${{ secrets.GHCR_PULL_USER }}
-          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
           CRM_SHA: ${{ steps.release.outputs.crm_sha }}
           NANOBOT_SHA: ${{ steps.release.outputs.nanobot_sha }}
           TEST_EMAIL: ${{ secrets.STAGING_TEST_EMAIL }}
@@ -131,9 +132,7 @@ jobs:
           "${SCP[@]}" rendered/nanobot.env "$STAGING_USER@$STAGING_HOST:/opt/ola-staging/nanobot/.env"
           "${SSH[@]}" "sudo chown -R 1000:1000 /opt/ola-staging/nanobot-state"
 
-          if [ -n "$GHCR_TOKEN" ]; then
-            printf '%s' "$GHCR_TOKEN" | "${SSH[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
-          fi
+          printf '%s' "$GHCR_TOKEN" | "${SSH[@]}" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
           previous="$("${SSH[@]}" 'cat /opt/ola-staging/last-green.env 2>/dev/null || true')"
           previous_crm="$(printf '%s\n' "$previous" | sed -n 's/^CRM_SHA=//p')"
           previous_bot="$(printf '%s\n' "$previous" | sed -n 's/^NANOBOT_SHA=//p')"

@@ -15,7 +15,6 @@ Create `staging` and `production` Environments. Add required reviewers to `produ
 
 Repository secrets:
 
-- `GHCR_PULL_USER`, `GHCR_PULL_TOKEN` (only when the GHCR packages are private)
 - `DEVELOPMENT_DATABASE`, `STAGING_DATABASE`, `PRODUCTION_DATABASE`
 - `STAGING_HOST`, `STAGING_USER`, `STAGING_SSH_KEY`, `STAGING_SSH_KNOWN_HOSTS`
 - `STAGING_TAILSCALE_IP`, `STAGING_BOOTSTRAP_CRM_SHA`, `STAGING_BOOTSTRAP_NANOBOT_SHA`
@@ -33,6 +32,8 @@ Ola_bot also needs `OLA_DEPLOY_TOKEN`, scoped to dispatch workflows in the Ola r
 
 Base64 configuration secrets are decoded only into mode-600 files. MongoDB URI values are
 parsed structurally; workflows never print complete URIs or credentials.
+GHCR pulls use the workflow's short-lived `GITHUB_TOKEN` with `packages: read`; no persistent
+package token is stored.
 
 ## Temporary staging database policy
 
