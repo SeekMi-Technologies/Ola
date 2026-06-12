@@ -16,8 +16,8 @@
     "sendProgress": true,
     "sendToolHints": false,
     "sendMaxRetries": 3,
-    "transcription_provider": "openai",
-    "transcription_language": null,
+    "transcriptionProvider": "openai",
+    "transcriptionLanguage": null,
     "dingtalk": {
       "enabled": false,
       "clientId": "",
