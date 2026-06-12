@@ -1,8 +1,8 @@
 // Transcription dispatcher (#257). Resolves STT provider per upload then
-// hands off to the matching provider module. Per-admin selection beats
-// process-wide env which beats hardcoded 'openai' fallback.
+// hands off to the matching provider module. Per-admin selection normally
+// beats process-wide env, unless the deployment explicitly locks the provider.
 //
-//   admin.transcribeProvider > process.env.TRANSCRIPTION_PROVIDER > 'openai'
+//   locked env > admin.transcribeProvider > env > 'openai'
 //
 // Shared helpers (needsCompression / compressToMp3) live here because they
 // apply to OpenAI's push-multipart path (size budget); paraformer's pull
@@ -39,16 +39,26 @@ async function compressToMp3(srcPath) {
 }
 
 async function resolveProvider(fileDoc) {
+  const providerLocked = /^(1|true|yes)$/i.test(
+    process.env.TRANSCRIPTION_PROVIDER_LOCKED || ''
+  );
   let adminProvider = null;
-  try {
-    const Admin = mongoose.model('Admin');
-    const admin = await Admin.findById(fileDoc.createdBy).select('transcribeProvider').lean();
-    if (admin && admin.transcribeProvider) adminProvider = admin.transcribeProvider;
-  } catch (e) {
-    // Admin lookup failure shouldn't block transcription — fall through to env/default.
-    console.warn(`[transcribe.dispatch] admin lookup failed: ${e.message}`);
+  if (!providerLocked) {
+    try {
+      const Admin = mongoose.model('Admin');
+      const admin = await Admin.findById(fileDoc.createdBy).select('transcribeProvider').lean();
+      if (admin && admin.transcribeProvider) adminProvider = admin.transcribeProvider;
+    } catch (e) {
+      // Admin lookup failure shouldn't block transcription — fall through to env/default.
+      console.warn(`[transcribe.dispatch] admin lookup failed: ${e.message}`);
+    }
   }
-  const provider = adminProvider || process.env.TRANSCRIPTION_PROVIDER || 'openai';
+  const provider = providerLocked
+    ? process.env.TRANSCRIPTION_PROVIDER
+    : adminProvider || process.env.TRANSCRIPTION_PROVIDER || 'openai';
+  if (providerLocked && !provider) {
+    throw new Error('TRANSCRIPTION_PROVIDER is required when provider locking is enabled');
+  }
   if (!VALID_PROVIDERS.has(provider)) {
     throw new Error(`Unknown transcription provider: ${provider}`);
   }
