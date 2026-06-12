@@ -33,6 +33,23 @@ test('adds the provider when it is missing', () => {
   );
 });
 
+test('applies deployment-specific provider lock and public callback URL', () => {
+  const source = `${required.join('\n')}\n`;
+  assert.equal(
+    renderCrmEnv(source, {
+      transcriptionProviderLocked: 'true',
+      backendPublicBaseUrl: 'https://staging.olatech.ai',
+    }),
+    [
+      'DASHSCOPE_API_KEY=dashscope-key',
+      'BACKEND_PUBLIC_BASE_URL=https://staging.olatech.ai',
+      'TRANSCRIPTION_PROVIDER=paraformer',
+      'TRANSCRIPTION_PROVIDER_LOCKED=true',
+      '',
+    ].join('\n')
+  );
+});
+
 for (const key of ['DASHSCOPE_API_KEY', 'BACKEND_PUBLIC_BASE_URL']) {
   test(`rejects a missing ${key}`, () => {
     const source = required.filter((line) => !line.startsWith(`${key}=`)).join('\n');
