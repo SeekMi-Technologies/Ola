@@ -3,7 +3,6 @@
 const fs = require('fs');
 
 const REQUIRED_KEYS = ['DASHSCOPE_API_KEY', 'BACKEND_PUBLIC_BASE_URL'];
-const TRANSCRIPTION_SETTING = 'TRANSCRIPTION_PROVIDER=paraformer';
 
 function upsertSetting(lines, key, value) {
   const setting = `${key}=${value}`;
