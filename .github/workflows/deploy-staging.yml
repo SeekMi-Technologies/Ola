@@ -96,6 +96,7 @@ jobs:
           ROOT_ENV_B64: ${{ secrets.STAGING_ROOT_ENV_B64 }}
           NANOBOT_CONFIG_B64: ${{ secrets.STAGING_NANOBOT_CONFIG_B64 }}
           NANOBOT_ENV_B64: ${{ secrets.STAGING_NANOBOT_ENV_B64 }}
+          CRM_UPLOAD_URL: http://${{ secrets.STAGING_TAILSCALE_IP }}:8889
         run: |
           set -euo pipefail
           install -d -m 700 rendered/crm/backend rendered/nanobot-state
@@ -111,11 +112,17 @@ jobs:
             config.gateway.host = "0.0.0.0";
             config.gateway.port = 8901;
             config.channels ??= {};
+            config.channels.transcriptionProvider = "openai";
             config.channels.whatsapp ??= {};
             config.channels.whatsapp.enabled = true;
             config.channels.whatsapp.bridgeUrl = "ws://nanobot-bridge:3001";
+            config.channels.whatsapp.crmUploadUrl = process.env.CRM_UPLOAD_URL;
+            if (!config.providers?.openai?.apiKey) {
+              throw new Error("Nanobot OpenAI API key is required for voice transcription");
+            }
             fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
           '
+          node crm/deploy/render-crm-env.js rendered/crm/backend/.env
           chmod 600 rendered/crm/backend/.env rendered/crm/.env rendered/nanobot-state/config.json rendered/nanobot.env
 
       - name: Deploy and verify staging
