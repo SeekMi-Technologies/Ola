@@ -1,9 +1,12 @@
 import { Layout, Card } from 'antd';
 import { GlobalOutlined, FileTextOutlined } from '@ant-design/icons';
-import LanguageSelect from '@/components/LanguageSelect';
+import LanguageToggle from '@/components/LanguageToggle';
+import useLanguage from '@/locale/useLanguage';
 import logo from '@/style/images/OLA_LOGO.svg';
 
 export default function AuthLayout({ children }) {
+  const translate = useLanguage();
+
   return (
     <Layout
       style={{
@@ -42,8 +45,8 @@ export default function AuthLayout({ children }) {
           flexDirection: 'column',
           justifyContent: 'center',
         }}
-        bodyStyle={{
-          padding: '40px 32px',
+        styles={{
+          body: { padding: '40px 32px' },
         }}
       >
         {children}
@@ -66,12 +69,12 @@ export default function AuthLayout({ children }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <GlobalOutlined style={{ color: '#9CA3AF', fontSize: '13px' }} />
-            <LanguageSelect />
+            <LanguageToggle variant="select" />
           </div>
           <span style={{ color: '#E5E7EB' }}>|</span>
           <a href="mailto:ola@olatech.ai" className="auth-layout-footer-link">
             <FileTextOutlined style={{ fontSize: '13px' }} />
-            Support
+            {translate('support')}
           </a>
         </div>
       </div>

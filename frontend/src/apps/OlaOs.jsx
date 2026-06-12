@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 
 import { useSelector } from 'react-redux';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { selectAuth } from '@/redux/auth/selectors';
 import { AppContextProvider } from '@/context/appContext';
 import PageLoader from '@/components/PageLoader';
@@ -29,8 +29,10 @@ export default function OlaOs() {
 
   const needsOnboarding = isLoggedIn && current?.onboarded === false;
 
+  const { pathname } = useLocation();
+
   const isAuthPath = ['/login', '/signup', '/register', '/forgetpassword', '/resetpassword'].some(
-    (p) => window.location.pathname === p || window.location.pathname.startsWith(p + '/')
+    (p) => pathname === p || pathname.startsWith(p + '/')
   );
 
   if ((!isLoggedIn && !bypassAuth) || isAuthPath) {

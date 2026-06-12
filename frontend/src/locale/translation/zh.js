@@ -842,6 +842,7 @@ const lang = {
   whatsapp_step_2: '点击「设置」，然后选择「已关联的设备」',
   whatsapp_step_3: '点击「关联新设备」',
   whatsapp_step_4: '用手机对准本屏幕扫描二维码',
+  support: '帮助与支持',
 };
 
 export default lang;

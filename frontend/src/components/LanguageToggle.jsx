@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Tooltip, notification } from 'antd';
+import { Tooltip, Select, notification } from 'antd';
 import { TranslationOutlined } from '@ant-design/icons';
 
 import { setLang } from '@/redux/lang/actions';
@@ -48,10 +48,6 @@ export default function LanguageToggle({ variant = 'header' }) {
   });
   const clickIdRef = useRef(0);
 
-  const targetLang = lang === 'zh' ? 'en' : 'zh';
-  const tooltipText =
-    lang === 'zh' ? translate('switch_to_english') : translate('switch_to_chinese');
-
   const syncAuthLocalStorage = (newLang) => {
     try {
       const stored = JSON.parse(window.localStorage.getItem('auth') || 'null');
@@ -71,28 +67,67 @@ export default function LanguageToggle({ variant = 'header' }) {
     });
   };
 
-  const handleClick = async () => {
-    const myClickId = ++clickIdRef.current;
-    dispatch(setLang(targetLang));
-
-    if (!isLoggedIn) return;
-
-    const response = await request.patch({
+  const saveLangToServer = async (newLang) => {
+    if (!isLoggedIn) return null;
+    return request.patch({
       entity: 'admin/profile/update',
       jsonData: {
         name: currentUser?.name,
         surname: currentUser?.surname,
         email: currentUser?.email,
-        language: targetLang,
+        language: newLang,
       },
       silent: true,
     });
+  };
 
+  // ---- select variant ----
+  if (variant === 'select') {
+    const handleChange = async (value) => {
+      const myClickId = ++clickIdRef.current;
+      dispatch(setLang(value));
+      const response = await saveLangToServer(value);
+      if (myClickId !== clickIdRef.current) return;
+      if (response && response.success === true) {
+        syncAuthLocalStorage(value);
+      } else if (response) {
+        warnLocalOnly();
+      }
+    };
+
+    return (
+      <Select
+        variant="borderless"
+        size="small"
+        value={lang}
+        onChange={handleChange}
+        style={{
+          color: '#9CA3AF',
+          fontSize: '13px',
+          width: '100px',
+        }}
+        popupMatchSelectWidth={false}
+        options={[
+          { value: 'en', label: 'English' },
+          { value: 'zh', label: '简体中文' },
+        ]}
+      />
+    );
+  }
+
+  // ---- toggle variants (header / auth / panel) ----
+  const targetLang = lang === 'zh' ? 'en' : 'zh';
+  const tooltipText =
+    lang === 'zh' ? translate('switch_to_english') : translate('switch_to_chinese');
+
+  const handleClick = async () => {
+    const myClickId = ++clickIdRef.current;
+    dispatch(setLang(targetLang));
+    const response = await saveLangToServer(targetLang);
     if (myClickId !== clickIdRef.current) return;
-
     if (response && response.success === true) {
       syncAuthLocalStorage(targetLang);
-    } else {
+    } else if (response) {
       warnLocalOnly();
     }
   };
