@@ -96,6 +96,7 @@ jobs:
           ROOT_ENV_B64: ${{ secrets.STAGING_ROOT_ENV_B64 }}
           NANOBOT_CONFIG_B64: ${{ secrets.STAGING_NANOBOT_CONFIG_B64 }}
           NANOBOT_ENV_B64: ${{ secrets.STAGING_NANOBOT_ENV_B64 }}
+          CRM_UPLOAD_URL: http://${{ secrets.STAGING_TAILSCALE_IP }}:8889
         run: |
           set -euo pipefail
           install -d -m 700 rendered/crm/backend rendered/nanobot-state
@@ -111,10 +112,37 @@ jobs:
             config.gateway.host = "0.0.0.0";
             config.gateway.port = 8901;
             config.channels ??= {};
+            config.channels.transcriptionProvider = "openai";
             config.channels.whatsapp ??= {};
             config.channels.whatsapp.enabled = true;
             config.channels.whatsapp.bridgeUrl = "ws://nanobot-bridge:3001";
+            config.channels.whatsapp.crmUploadUrl = process.env.CRM_UPLOAD_URL;
+            if (!config.providers?.openai?.apiKey) {
+              throw new Error("Nanobot OpenAI API key is required for voice transcription");
+            }
             fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
+          '
+          node -e '
+            const fs = require("fs");
+            const path = "rendered/crm/backend/.env";
+            const lines = fs.readFileSync(path, "utf8").split(/\r?\n/);
+            let foundProvider = false;
+            const rendered = lines.map((line) => {
+              if (!line.startsWith("TRANSCRIPTION_PROVIDER=")) return line;
+              foundProvider = true;
+              return "TRANSCRIPTION_PROVIDER=paraformer";
+            });
+            if (!foundProvider) rendered.push("TRANSCRIPTION_PROVIDER=paraformer");
+            const values = new Map(rendered
+              .filter((line) => line && !line.startsWith("#") && line.includes("="))
+              .map((line) => {
+                const index = line.indexOf("=");
+                return [line.slice(0, index), line.slice(index + 1)];
+              }));
+            for (const key of ["DASHSCOPE_API_KEY", "BACKEND_PUBLIC_BASE_URL"]) {
+              if (!values.get(key)) throw new Error(`${key} is required for Paraformer transcription`);
+            }
+            fs.writeFileSync(path, rendered.join("\n").replace(/\n*$/, "\n"));
           '
           chmod 600 rendered/crm/backend/.env rendered/crm/.env rendered/nanobot-state/config.json rendered/nanobot.env
 
