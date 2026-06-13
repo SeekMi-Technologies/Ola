@@ -18,7 +18,8 @@ fi
 LOCAL_DB_HOST="ola-local.dmbtqkq"
 
 # Local-dev seed admin (admin@admin.com) in the shared ola-local cluster, used to
-# pre-create its WhatsApp bridge auth dir. Re-seeding ola-local mints a new _id.
+# pre-create its WhatsApp bridge auth dir. Re-seeding ola-local mints a new _id —
+# find it with: mongosh "$DATABASE" --quiet --eval 'db.admins.findOne({},{_id:1})'
 DEV_ADMIN_ID="6a2dda1adf0fb4e9881a34c9"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
