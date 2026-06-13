@@ -166,18 +166,6 @@ done
 export no_proxy="api.deepseek.com,localhost,127.0.0.1,${no_proxy:-}"
 export NO_PROXY="api.deepseek.com,localhost,127.0.0.1,${NO_PROXY:-}"
 
-# Detect Python command (prefer python3.11, fallback to python3 or python)
-if command -v python3.11 >/dev/null 2>&1; then
-  PYTHON_CMD="python3.11"
-elif command -v python3 >/dev/null 2>&1; then
-  PYTHON_CMD="python3"
-elif command -v python >/dev/null 2>&1; then
-  PYTHON_CMD="python"
-else
-  echo -e "${RED}Error: Python not found. Please install Python 3.11+.${NC}"
-  exit 1
-fi
-
 # 3. NanoBot — two processes:
 #   serve   (8900) — OpenAI-compat /v1/chat/completions for askola web
 #   gateway (8901) — ChannelManager (email/etc) + cron + heartbeat
@@ -186,11 +174,11 @@ fi
 if [ -d "$NANOBOT_DIR" ]; then
   echo -e "${GREEN}[4a/5] Starting NanoBot serve (port 8900) — askola chat completions...${NC}"
   cd "$NANOBOT_DIR"
-  $PYTHON_CMD -m nanobot serve > /tmp/ola-nanobot.log 2>&1 &
+  python -m nanobot serve > /tmp/ola-nanobot.log 2>&1 &
   NANOBOT_PID=$!
 
   echo -e "${GREEN}[4b/5] Starting NanoBot gateway (port 8901) — channels (email/etc)...${NC}"
-  $PYTHON_CMD -m nanobot gateway --port 8901 > /tmp/ola-nanobot-gateway.log 2>&1 &
+  python -m nanobot gateway --port 8901 > /tmp/ola-nanobot-gateway.log 2>&1 &
   NANOBOT_GATEWAY_PID=$!
 
   # 4c. WhatsApp bridge (single shared, dev-only convenience).
