@@ -14,8 +14,8 @@ These two files are **gitignored and never committed**. You cannot get them from
 
 | File | What to do |
 |---|---|
-| `backend/.env` | Copy `backend/.env.example` → `backend/.env`, then ask Yuandong to send you the real values for the 4 required keys (`DATABASE`, `JWT_SECRET`, `MCP_SERVICE_TOKEN`, `GEMINI_API_KEY`). |
-| `.secrets/SERVERS.env` | Create the folder and file yourself (`mkdir .secrets && touch .secrets/SERVERS.env`), then ask Yuandong to send you the full file content. This file holds all production server IPs, SSH credentials, and app secrets. |
+| `backend/.env` | Copy `backend/.env.example` → `backend/.env`, then ask Yuandong for the dev-shared values. This is the SINGLE source of local config — start-dev.sh reads only this. Required keys: `DATABASE` (the local-dev cluster `ola-local.dmbtqkq`), `JWT_SECRET`, `MCP_SERVICE_TOKEN`, `DEEPSEEK_API_KEY`, and the `ZOHO_*` set. See `backend/.env.example` for the full list. |
+| `.secrets/SERVERS.env` | **Only needed if you deploy to prod** (the `deploy` skill / SSH ops). Local dev via `start-dev.sh` does NOT read this — skip it unless Yuandong asks you to deploy. Holds prod server IPs, SSH creds, and app secrets. |
 
 **Do not proceed with `start-dev.sh` until `backend/.env` is filled in.**
 
@@ -142,24 +142,27 @@ ls ~/dev/      # → crm  nanobot
 test -d ~/dev/crm/backend && test -d ~/dev/nanobot/nanobot && echo "siblings OK"
 
 # ───────────────── 3. Get backend/.env from zyd ─────────────────
-# Ask zyd for the dev shared values for these 4 keys (paste over the
-# example file). Never commit this file — it's gitignored.
+# backend/.env is the SINGLE source of local config — start-dev.sh sources ONLY
+# this, never .secrets/SERVERS.env (that prod bundle is deploy-only). Ask zyd for
+# the dev-shared values, paste over the example. Never commit it — it's gitignored.
 cd ~/dev/crm
 cp backend/.env.example backend/.env
-# Now open backend/.env and fill these 4 (zyd will hand them over Slack/1Password):
-#   DATABASE=mongodb+srv://...        (DEV Atlas cluster `ola-dev.qc8fvks`, db `oladev` — #351.
-#                                      NEVER the prod URI: start-dev.sh fingerprint-compares
-#                                      against .secrets/SERVERS.env and refuses to start on match.
-#                                      Machines without .secrets/ skip the check.)
+# Fill these (zyd hands them over Slack/1Password):
+#   DATABASE=mongodb+srv://...@ola-local.dmbtqkq...   (the dedicated LOCAL-dev cluster.
+#                                      start-dev.sh whitelists host `ola-local.dmbtqkq` and
+#                                      REFUSES staging `ola-dev` / prod `cluster0`. db name is free.)
 #   JWT_SECRET=...                    (any 64-hex string; `openssl rand -hex 32`)
 #   MCP_SERVICE_TOKEN=...             (dev-shared value from zyd)
-#   GEMINI_API_KEY=AIza...            (zyd's dev key, OR your own from aistudio.google.com)
-# Fresh dev DB? Seed it once (admin@admin.com + default settings):
+#   DEEPSEEK_API_KEY=sk-...           (nanobot's default LLM; platform.deepseek.com)
+#   ZOHO_OLA_EMAIL / ZOHO_OLA_APP_PASSWORD / ZOHO_IMAP_HOST / ZOHO_SMTP_HOST
+#                                     (dev-shared from zyd — start-dev.sh renders the nanobot
+#                                      config from them and won't boot if any is missing)
+# Fresh local DB? Seed it once (admin@admin.com + default settings + indexes):
 #   cd backend && ADMIN_EMAIL=admin@admin.com ADMIN_PASSWORD=admin123 npm run setup
 
-# Verify:
-grep -E '^(DATABASE|JWT_SECRET|MCP_SERVICE_TOKEN|GEMINI_API_KEY)=' backend/.env | wc -l
-# → should print  4
+# Verify (all start-dev.sh-required keys present):
+grep -E '^(DATABASE|JWT_SECRET|MCP_SERVICE_TOKEN|DEEPSEEK_API_KEY|ZOHO_OLA_EMAIL|ZOHO_OLA_APP_PASSWORD|ZOHO_IMAP_HOST|ZOHO_SMTP_HOST)=' backend/.env | wc -l
+# → should print  8
 
 # ───────────────── 4. Project-root .env (only needed for docker compose) ─────
 # wzh/yili: SKIP this step. Required only for `docker compose up` (prod
@@ -236,8 +239,7 @@ Same as the wzh/yili 8-step quickstart above, plus:
   `ffmpeg` to compress large recordings to mono 16k MP3 so they fit under
   OpenAI's 25 MB upload cap. Without it, audio over 20 MB or any WAV/FLAC
   input fails with a specific error from the tool.
-- **Step 3 — add `OPENAI_API_KEY` to `backend/.env`** (or
-  `.secrets/SERVERS.env`, see secrets section below). Required when
+- **Step 3 — add `OPENAI_API_KEY` to `backend/.env`**. Required when
   exercising sales-coach: nanobot's `OpenAITranscriptionProvider` reads it
   from env. Get from
   [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
