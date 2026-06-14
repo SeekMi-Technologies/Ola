@@ -1,0 +1,92 @@
+/* AuthLayout — 现代登录/注册页面布局 */
+
+.auth-layout {
+  min-height: 100vh;
+  background: #F9FAFB;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 40px 24px 32px;
+}
+
+.auth-layout-logo {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.auth-layout-logo-img {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+}
+
+.auth-layout-card {
+  width: 100%;
+  max-width: 460px;
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.auth-layout-card .ant-card-body {
+  padding: 40px 32px;
+}
+
+.auth-layout-footer {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #9CA3AF;
+  font-size: 13px;
+  margin-top: 32px;
+}
+
+.auth-layout-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auth-layout-footer-locale {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.auth-layout-footer-icon {
+  color: #9CA3AF;
+  font-size: 13px;
+}
+
+.auth-layout-footer-separator {
+  color: #E5E7EB;
+}
+
+.auth-layout-footer-support-icon {
+  font-size: 13px;
+}
+
+/* Footer 链接样式 */
+.auth-layout-footer-link {
+  color: #9CA3AF;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.2s ease;
+}
+
+.auth-layout-footer-link:hover {
+  color: #1640D6; /* 项目主题色 */
+}
+
+.auth-layout-footer-link .anticon {
+  color: inherit;
+  transition: color 0.2s ease;
+}
