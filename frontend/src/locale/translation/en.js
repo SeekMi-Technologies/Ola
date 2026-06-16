@@ -842,6 +842,7 @@ const lang = {
   whatsapp_step_2: 'Tap "Settings", then select "Linked Devices"',
   whatsapp_step_3: 'Tap "Link a new device"',
   whatsapp_step_4: 'Point your phone at this screen to scan the QR code',
+  support: 'Support',
 };
 
 export default lang;

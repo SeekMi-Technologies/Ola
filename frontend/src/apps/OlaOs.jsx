@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 
 import { useSelector } from 'react-redux';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { selectAuth } from '@/redux/auth/selectors';
 import { AppContextProvider } from '@/context/appContext';
 import PageLoader from '@/components/PageLoader';
@@ -29,12 +29,13 @@ export default function OlaOs() {
 
   const needsOnboarding = isLoggedIn && current?.onboarded === false;
 
-  // 三层路由拦截:
-  // 1. 未登录 → AuthRouter（Login / Register）
-  // 2. 已登录 + 未上车 → /onboarding
-  // 3. 已登录 + 已上车 → DefaultApp（ErpApp）
+  const { pathname } = useLocation();
 
-  if (!isLoggedIn && !bypassAuth) {
+  const isAuthPath = ['/login', '/signup', '/register', '/forgetpassword', '/resetpassword'].some(
+    (p) => pathname === p || pathname.startsWith(p + '/')
+  );
+
+  if ((!isLoggedIn && !bypassAuth) || isAuthPath) {
     return (
       <Localization>
         <AuthRouter />

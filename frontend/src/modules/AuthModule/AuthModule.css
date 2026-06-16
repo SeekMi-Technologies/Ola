@@ -1,0 +1,14 @@
+/* AuthModule — 登录/注册页 header 样式 */
+
+.auth-module-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.auth-module-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  color: #111827;
+  letter-spacing: -0.5px;
+}
