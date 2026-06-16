@@ -1,6 +1,8 @@
 import React from 'react';
 import { Breadcrumb } from 'antd';
 import { Link, useLocation } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { selectReadItem } from '@/redux/erp/selectors';
 import useLanguage from '@/locale/useLanguage';
 
 // Mapping path segments to localized translation keys
@@ -54,6 +56,7 @@ const ROUTE_CATEGORY_MAP = {
 export default function AppBreadcrumb() {
   const location = useLocation();
   const translate = useLanguage();
+  const readItem = useSelector(selectReadItem);
   const pathnames = location.pathname.split('/').filter((x) => x);
 
   // Return null on login, register, onboarding pages to keep layout clean
@@ -83,19 +86,28 @@ export default function AppBreadcrumb() {
       title: translate('Dashboard'),
     });
   } else {
-    pathnames.forEach((value, index) => {
-      // Skip rendering 'dashboard' and 'edit' segments if they happen to be present in subpaths to keep it clean
-      if (value.toLowerCase() === 'dashboard' || value.toLowerCase() === 'edit') return;
+    const SKIP_SEGMENTS = new Set(['dashboard', 'edit', 'update', 'read', 'create', 'list']);
+    const objectId = pathnames.find((s) => /^[a-f0-9]{24}$/i.test(s));
+    const visibleSegments = pathnames
+      .map((value, index) => ({ value, index }))
+      .filter(({ value }) => !SKIP_SEGMENTS.has(value.toLowerCase()) && !/^[a-f0-9]{24}$/i.test(value));
 
+    visibleSegments.forEach(({ value, index }, visibleIndex) => {
+      const isLast = visibleIndex === visibleSegments.length - 1;
       const translationKey = PATH_TRANSLATION_MAP[value.toLowerCase()] || value;
       const label = translate(translationKey) || value.charAt(0).toUpperCase() + value.slice(1);
       const url = `/${pathnames.slice(0, index + 1).join('/')}`;
-      const isLast = index === pathnames.length - 1;
 
       breadcrumbItems.push({
-        title: isLast ? label : <Link to={url}>{label}</Link>,
+        title: isLast && !objectId ? label : <Link to={url}>{label}</Link>,
       });
     });
+
+    if (objectId) {
+      const storeId = readItem?.result?._id?.toString();
+      const docNumber = storeId === objectId ? readItem.result.number : objectId;
+      breadcrumbItems.push({ title: docNumber });
+    }
   }
 
   return (
