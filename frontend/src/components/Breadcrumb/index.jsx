@@ -1,7 +1,6 @@
 import React from 'react';
 import { Breadcrumb } from 'antd';
 import { Link, useLocation } from 'react-router-dom';
-import { HomeOutlined } from '@ant-design/icons';
 import useLanguage from '@/locale/useLanguage';
 
 // Mapping path segments to localized translation keys
@@ -26,6 +25,30 @@ const PATH_TRANSLATION_MAP = {
   list: 'list',
 };
 
+// Route Category Map based on the first path segment
+const ROUTE_CATEGORY_MAP = {
+  // Main
+  '': 'Main',
+  'dashboard': 'Main',
+  'askola': 'Main',
+  'file': 'Main',
+  'integrations': 'Main',
+  'control': 'Main',
+  'settings': 'Workspace',
+  'profile': 'Personal',
+
+  // Business
+  'customer': 'Business',
+  'merchandise': 'Business',
+  'factory': 'Business',
+
+  // Finance
+  'quote': 'Finance',
+  'purchaseorder': 'Finance',
+  'invoice': 'Finance',
+  'payment': 'Finance',
+};
+
 export default function AppBreadcrumb() {
   const location = useLocation();
   const translate = useLanguage();
@@ -37,34 +60,48 @@ export default function AppBreadcrumb() {
     return null;
   }
 
+  // Determine Category based on first segment
+  const primarySegment = pathnames[0] ? pathnames[0].toLowerCase() : '';
+  const category = ROUTE_CATEGORY_MAP[primarySegment] || 'Main';
+
   const breadcrumbItems = [
     {
       title: (
-        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#1677ff' }}>
-          <HomeOutlined style={{ fontSize: '13px' }} />
-          <span>{translate('Dashboard') || 'Dashboard'}</span>
-        </Link>
+        <span style={{ color: '#8c8c8c', fontWeight: 400 }}>
+          {translate(category)}
+        </span>
       ),
     },
   ];
 
-  pathnames.forEach((value, index) => {
-    // Skip rendering 'dashboard' since Home/Dashboard is already the root item
-    if (value.toLowerCase() === 'dashboard') return;
-
-    const translationKey = PATH_TRANSLATION_MAP[value.toLowerCase()] || value;
-    const label = translate(translationKey) || value.charAt(0).toUpperCase() + value.slice(1);
-    const url = `/${pathnames.slice(0, index + 1).join('/')}`;
-    const isLast = index === pathnames.length - 1;
-
+  if (pathnames.length === 0 || (pathnames.length === 1 && pathnames[0].toLowerCase() === 'dashboard')) {
+    // For root path or dashboard, append Dashboard as the active last item
     breadcrumbItems.push({
-      title: isLast ? (
-        <span style={{ color: '#595959', fontWeight: 500 }}>{label}</span>
-      ) : (
-        <Link to={url} style={{ color: '#1677ff' }}>{label}</Link>
+      title: (
+        <span style={{ color: '#595959', fontWeight: 500 }}>
+          {translate('Dashboard')}
+        </span>
       ),
     });
-  });
+  } else {
+    pathnames.forEach((value, index) => {
+      // Skip rendering 'dashboard' segment if it happens to be present in subpaths to keep it clean
+      if (value.toLowerCase() === 'dashboard') return;
+
+      const translationKey = PATH_TRANSLATION_MAP[value.toLowerCase()] || value;
+      const label = translate(translationKey) || value.charAt(0).toUpperCase() + value.slice(1);
+      const url = `/${pathnames.slice(0, index + 1).join('/')}`;
+      const isLast = index === pathnames.length - 1;
+
+      breadcrumbItems.push({
+        title: isLast ? (
+          <span style={{ color: '#595959', fontWeight: 500 }}>{label}</span>
+        ) : (
+          <Link to={url} style={{ color: '#1677ff' }}>{label}</Link>
+        ),
+      });
+    });
+  }
 
   return (
     <Breadcrumb

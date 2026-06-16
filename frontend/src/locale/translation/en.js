@@ -854,6 +854,11 @@ const lang = {
   notion_access_team: 'Team-only',
   notion_access_private: 'Private (Invite only)',
   notion_connect: 'Connect',
+  Main: 'Main',
+  Business: 'Business',
+  Finance: 'Finance',
+  Personal: 'Personal',
+  Workspace: 'Workspace',
 };
 
 export default lang;

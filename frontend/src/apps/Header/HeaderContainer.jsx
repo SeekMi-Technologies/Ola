@@ -117,7 +117,6 @@ export default function HeaderContent() {
       }}
     >
       <div className="header-page-title" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span className="header-page-icon" style={{ display: 'flex', alignItems: 'center' }}>{pageInfo.icon}</span>
         <AppBreadcrumb />
       </div>
 

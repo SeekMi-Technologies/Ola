@@ -854,6 +854,11 @@ const lang = {
   notion_access_team: '仅团队成员 (Team-only)',
   notion_access_private: '私人 (仅限受邀者) (Private - Invite only)',
   notion_connect: '连接',
+  Main: '主要',
+  Business: '业务',
+  Finance: '财务',
+  Personal: '个人',
+  Workspace: '工作区',
 };
 
 export default lang;
