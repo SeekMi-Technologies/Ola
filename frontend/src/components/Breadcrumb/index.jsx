@@ -73,22 +73,14 @@ export default function AppBreadcrumb() {
 
   const breadcrumbItems = [
     {
-      title: (
-        <span style={{ color: '#8c8c8c', fontWeight: 400 }}>
-          {translate(category)}
-        </span>
-      ),
+      title: translate(category),
     },
   ];
 
   if (pathnames.length === 0 || (pathnames.length === 1 && pathnames[0].toLowerCase() === 'dashboard')) {
     // For root path or dashboard, append Dashboard as the active last item
     breadcrumbItems.push({
-      title: (
-        <span style={{ color: '#595959', fontWeight: 500 }}>
-          {translate('Dashboard')}
-        </span>
-      ),
+      title: translate('Dashboard'),
     });
   } else {
     pathnames.forEach((value, index) => {
@@ -101,25 +93,15 @@ export default function AppBreadcrumb() {
       const isLast = index === pathnames.length - 1;
 
       breadcrumbItems.push({
-        title: isLast ? (
-          <span style={{ color: '#595959', fontWeight: 500 }}>{label}</span>
-        ) : (
-          <Link to={url} style={{ color: '#1677ff' }}>{label}</Link>
-        ),
+        title: isLast ? label : <Link to={url}>{label}</Link>,
       });
     });
   }
 
   return (
     <Breadcrumb
-      separator={<span style={{ color: '#bfbfbf', margin: '0 4px' }}>&gt;</span>}
+      separator=">"
       items={breadcrumbItems}
-      style={{
-        fontSize: '13px',
-        fontFamily: 'Inter, system-ui, sans-serif',
-        display: 'flex',
-        alignItems: 'center',
-      }}
     />
   );
 }

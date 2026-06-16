@@ -195,29 +195,15 @@ export default function Settings() {
         <div className="settings-content">
           <div className="settings-content-header">
             <Breadcrumb
-              separator={<span style={{ color: '#bfbfbf', margin: '0 4px' }}>&gt;</span>}
+              separator=">"
               items={[
                 {
-                  title: (
-                    <span style={{ color: '#8c8c8c', fontWeight: 400 }}>
-                      {translate(currentCategory)}
-                    </span>
-                  ),
+                  title: translate(currentCategory),
                 },
                 {
-                  title: (
-                    <span style={{ color: '#595959', fontWeight: 500 }}>
-                      {currentPanel.label}
-                    </span>
-                  ),
+                  title: currentPanel.label,
                 },
               ]}
-              style={{
-                fontSize: '13px',
-                fontFamily: 'Inter, system-ui, sans-serif',
-                display: 'flex',
-                alignItems: 'center',
-              }}
             />
           </div>
           <div className="settings-content-body">
