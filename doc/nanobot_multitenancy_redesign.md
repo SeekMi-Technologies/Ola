@@ -15,25 +15,25 @@
 
 坏的全在请求链路**之外**：provisioning、Dream 自进化、后台任务（cron/heartbeat）、subagent、per-admin 人设。生产现在靠 **serve-only + 禁 cron** 才安全（stopgap）。
 
-## 2. epic 拆解 — 一个 PR 干一件事
+## 2. epic 拆解 — atomic commit 攒一个完整 PR
 
-四个有序 stage，每个独立可测、独立成 PR（nanobot `ZYD_FEAT` → PR → `ola-dev`）。顺序内 #356 依赖 #354。
+每个 stage 一个 **atomic commit**（git 历史清晰、可单独 review/revert），但**不逐 stage PR**。顺序内 #356 依赖 #354。
 
-| Stage | Issue | 一句话 | 性质 | PR |
+| Stage | Issue | 一句话 | 仓库 | 依赖 |
 |---|---|---|---|---|
-| 01 | #353 | per-admin prompt 读取 + 全局回退 | 纯读、零写 | PR-1 |
-| 02 | #354 | lazy provisioning + USER.md 播种 | 写路径、幂等 | PR-2 |
-| 03 | #355 | file_state 按 admin 隔离 | 内存状态键改造 | PR-3 |
-| 04 | #356 | 存量用户 backfill 脚本 | 一次性幂等迁移 | PR-4（依赖 PR-2） |
-
-执行节奏：完成一个 stage → `/ship` 出 PR → 合并到 `ola-dev` → rebase ZYD_FEAT → 下一个 stage。PR 之间不串味。
-
-**地基之后的后续 epic**（详见 §8，依赖 #353 + #354）：人设控制面 —— 让我们在 devboard 看/改每个用户的人设，告别手改 box。
-
-| Stage | 一句话 | 仓库 | 依赖 |
-|---|---|---|---|
-| P-A | nanobot 人设控制面 API（`/internal/persona/*`） | nanobot | #353 + #354 |
+| 01 | #353 | per-admin prompt 读取 + 全局回退 | nanobot | — |
+| 02 | #354 | lazy provisioning + USER.md 播种 | nanobot | — |
+| 03 | #355 | file_state 按 admin 隔离 | nanobot | — |
+| 04 | #356 | 存量用户 backfill 脚本 | nanobot | #354 |
+| P-A | 人设控制面 API（`/internal/persona/*`） | nanobot | #353+#354 |
 | P-B | devboard 人设管理页 + BFF | ola_devboard | P-A |
+
+**PR 纪律（硬规则）**：commit 攒在 feature 分支（nanobot `ZYD_FEAT`）上，**整个 feature（#353→P-A）+ devboard 侧（P-B）一起本地端到端测过**之后才开 PR。
+- 合并到 `ola-dev`(nanobot) / `dev`(crm) **会触发 staging server 全量重部署** —— 绝不用半成品 epic 触发。
+- ❌ 不逐 atomic stage PR。**一个 PR = 一个完整可部署的 feature。**
+- 纯文档（crm）可独立 PR → `dev`（不部署服务），属个例。
+
+人设控制面 P-A / P-B 详见 §8。
 
 ## 3. 锁定的设计决策
 
