@@ -4,6 +4,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import { PageHeader } from '@ant-design/pro-layout';
 import useLanguage from '@/locale/useLanguage';
 import whatsappLogo from '@/style/images/whatsapp.png';
+import notionLogo from '@/style/images/notion.png';
 import { waLogin, waStatus, waLogout } from '@/request/whatsapp';
 
 // Data lives outside the component so it is never recreated on render.
@@ -22,22 +23,49 @@ const INTEGRATIONS_DATA = [
       />
     ),
   },
+  {
+    id: 'notion',
+    name: 'Notion',
+    popular: true,
+    descriptionKey: 'integration_desc_notion',
+    logo: (
+      <img
+        src={notionLogo}
+        alt="Notion"
+        style={{ width: '22px', height: '22px', objectFit: 'contain' }}
+      />
+    ),
+  },
 ];
 
 // Observed bridge status → i18n label key + accent color.
-const STATUS_LABEL_KEY = {
-  disconnected: 'whatsapp_status_disconnected',
-  qr_pending: 'whatsapp_status_connecting',
-  connected: 'whatsapp_status_connected',
+const labelKeyFor = (item, s) => {
+  if (item.id === 'whatsapp') {
+    const keys = {
+      disconnected: 'whatsapp_status_disconnected',
+      qr_pending: 'whatsapp_status_connecting',
+      connected: 'whatsapp_status_connected',
+    };
+    return keys[s] || keys.disconnected;
+  }
+  const keys = {
+    disconnected: 'notion_status_disconnected',
+    connecting: 'notion_status_connecting',
+    connected: 'notion_status_connected',
+  };
+  return keys[s] || keys.disconnected;
 };
-const STATUS_COLOR = {
-  disconnected: '#8c8c8c',
-  qr_pending: '#1677ff',
-  connected: '#52c41a',
+
+const colorFor = (s) => {
+  const colors = {
+    disconnected: '#8c8c8c',
+    qr_pending: '#1677ff',
+    connecting: '#1677ff',
+    connected: '#52c41a',
+  };
+  return colors[s] || colors.disconnected;
 };
-// logged_out / unknown collapse to "not connected" in the UI — no separate display.
-const labelKeyFor = (s) => STATUS_LABEL_KEY[s] || STATUS_LABEL_KEY.disconnected;
-const colorFor = (s) => STATUS_COLOR[s] || STATUS_COLOR.disconnected;
+
 const POLL_MS = 2500;
 
 export default function IntegrationsPage() {
@@ -54,6 +82,12 @@ export default function IntegrationsPage() {
   const [waQr, setWaQr] = useState(null);
   const pollRef = useRef(null);
 
+  // Notion mock state.
+  const [isNotionModalOpen, setIsNotionModalOpen] = useState(false);
+  const [notionStatusValue, setNotionStatusValue] = useState('disconnected');
+  const [notionQr, setNotionQr] = useState(null);
+  const [generatingNotionQr, setGeneratingNotionQr] = useState(false);
+
   const stopPolling = () => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
@@ -62,8 +96,12 @@ export default function IntegrationsPage() {
   };
 
   const isItemConnected = useCallback(
-    (item) => item.id === 'whatsapp' && waStatusValue === 'connected',
-    [waStatusValue]
+    (item) => {
+      if (item.id === 'whatsapp') return waStatusValue === 'connected';
+      if (item.id === 'notion') return notionStatusValue === 'connected';
+      return false;
+    },
+    [waStatusValue, notionStatusValue]
   );
 
   // Map an error to the right localized toast (503 = gateway down).
@@ -135,9 +173,50 @@ export default function IntegrationsPage() {
     });
   };
 
-  const handleSwitch = (checked) => {
-    if (checked) handleConnect();
-    else confirmDisconnect();
+  const handleNotionSwitch = (checked) => {
+    if (checked) {
+      setNotionQr(null);
+      setGeneratingNotionQr(true);
+      setIsNotionModalOpen(true);
+      setTimeout(() => {
+        setNotionQr('https://notion.so/mock-qr-code-wzh-ui-inte');
+        setGeneratingNotionQr(false);
+      }, 1500);
+    } else {
+      Modal.confirm({
+        title: translate('notion_disconnect_confirm'),
+        okText: translate('notion_disconnect'),
+        cancelText: translate('cancel'),
+        okButtonProps: { danger: true },
+        onOk: () => {
+          setNotionStatusValue('disconnected');
+          setNotionQr(null);
+          message.info(`Notion ${translate('integration_disconnected')}`);
+        },
+      });
+    }
+  };
+
+  const handleNotionModalCancel = () => {
+    setIsNotionModalOpen(false);
+    if (notionStatusValue === 'connecting') {
+      setNotionStatusValue('disconnected');
+    }
+  };
+
+  const handleNotionSimulateScan = () => {
+    setNotionStatusValue('connected');
+    setIsNotionModalOpen(false);
+    message.success(`Notion ${translate('integration_connected')}`);
+  };
+
+  const handleSwitch = (item, checked) => {
+    if (item.id === 'whatsapp') {
+      if (checked) handleConnect();
+      else confirmDisconnect();
+    } else if (item.id === 'notion') {
+      handleNotionSwitch(checked);
+    }
   };
 
   // Closing the QR dialog before scanning cancels the attempt: stop polling,
@@ -255,7 +334,12 @@ export default function IntegrationsPage() {
       <Row gutter={[24, 24]}>
         {filteredIntegrations.map((item) => {
           const isConnected = isItemConnected(item);
-          const statusValue = item.id === 'whatsapp' ? waStatusValue : 'disconnected';
+          const statusValue =
+            item.id === 'whatsapp'
+              ? waStatusValue
+              : item.id === 'notion'
+              ? notionStatusValue
+              : 'disconnected';
           return (
             <Col xs={24} sm={12} md={12} key={item.id}>
               <div
@@ -285,11 +369,11 @@ export default function IntegrationsPage() {
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                       <span style={{ fontSize: '12px', fontWeight: 500, color: colorFor(statusValue) }}>
-                        {translate(labelKeyFor(statusValue))}
+                        {translate(labelKeyFor(item, statusValue))}
                       </span>
                       <Switch
                         checked={isConnected}
-                        onChange={handleSwitch}
+                        onChange={(checked) => handleSwitch(item, checked)}
                       />
                     </div>
                   </div>
@@ -360,6 +444,66 @@ export default function IntegrationsPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Notion Connection Modal */}
+      <Modal
+        title={
+          <div style={{ fontSize: '20px', fontWeight: '600', color: '#1f1f1f', fontFamily: 'Inter, system-ui, sans-serif', paddingBottom: '16px', borderBottom: '1px solid #f0f0f0' }}>
+            {translate('notion_modal_title')}
+          </div>
+        }
+        open={isNotionModalOpen}
+        onCancel={handleNotionModalCancel}
+        footer={null}
+        width={640}
+        centered
+        styles={{
+          content: {
+            borderRadius: '16px',
+            padding: '24px 32px',
+          }
+        }}
+      >
+        <div style={{ display: 'flex', gap: '32px', padding: '24px 0 8px', alignItems: 'center' }}>
+          {/* Left Column: Instructions */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <ol style={{ paddingLeft: '20px', margin: 0, display: 'flex', flexDirection: 'column', gap: '14px', color: '#595959', fontSize: '14px', lineHeight: '1.6' }}>
+              <li>{translate('notion_step_1')}</li>
+              <li>{translate('notion_step_2')}</li>
+              <li>{translate('notion_step_3')}</li>
+              <li>{translate('notion_step_4')}</li>
+            </ol>
+          </div>
+
+          {/* Right Column: QR and Simulate Scan button */}
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', flexShrink: 0, gap: '16px' }}>
+            <div style={{ border: '1px solid #e8e8e8', borderRadius: '12px', padding: '12px', background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+              {generatingNotionQr ? (
+                <div style={{ width: 160, height: 160, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', color: '#8c8c8c', fontSize: 13 }}>
+                  <Spin />
+                  <span>{translate('notion_generating_qr')}</span>
+                </div>
+              ) : notionQr ? (
+                <QRCode value={notionQr} size={160} bordered={false} />
+              ) : (
+                <div style={{ width: 160, height: 160, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', color: '#8c8c8c', fontSize: 13 }}>
+                  <Spin />
+                  <span>{translate('notion_generating_qr')}</span>
+                </div>
+              )}
+            </div>
+            {!generatingNotionQr && notionQr && (
+              <Button
+                type="primary"
+                onClick={handleNotionSimulateScan}
+                style={{ borderRadius: '6px', width: '100%', fontWeight: 500 }}
+              >
+                {translate('zh') === 'zh' ? '模拟扫码接入' : 'Simulate Scan'}
+              </Button>
+            )}
           </div>
         </div>
       </Modal>

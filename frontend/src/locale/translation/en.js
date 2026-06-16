@@ -842,6 +842,17 @@ const lang = {
   whatsapp_step_2: 'Tap "Settings", then select "Linked Devices"',
   whatsapp_step_3: 'Tap "Link a new device"',
   whatsapp_step_4: 'Point your phone at this screen to scan the QR code',
+  notion_status_disconnected: 'Not connected',
+  notion_status_connecting: 'Connecting…',
+  notion_status_connected: 'Connected',
+  notion_disconnect_confirm: 'Disconnect Notion?',
+  notion_disconnect: 'Disconnect',
+  notion_generating_qr: 'Generating QR code…',
+  notion_modal_title: 'Connect a Notion workspace',
+  notion_step_1: 'Open Notion on your phone or web browser',
+  notion_step_2: 'Tap "Settings", then select "Connections"',
+  notion_step_3: 'Select "Link a new integration"',
+  notion_step_4: 'Point your camera at this screen to scan the QR code',
 };
 
 export default lang;

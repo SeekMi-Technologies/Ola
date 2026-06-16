@@ -842,6 +842,17 @@ const lang = {
   whatsapp_step_2: '点击「设置」，然后选择「已关联的设备」',
   whatsapp_step_3: '点击「关联新设备」',
   whatsapp_step_4: '用手机对准本屏幕扫描二维码',
+  notion_status_disconnected: '未接入',
+  notion_status_connecting: '连接中…',
+  notion_status_connected: '已接入',
+  notion_disconnect_confirm: '确定取消接入 Notion？',
+  notion_disconnect: '取消接入',
+  notion_generating_qr: '正在生成二维码…',
+  notion_modal_title: '关联 Notion 工作区',
+  notion_step_1: '在您的设备或浏览器中打开 Notion',
+  notion_step_2: '点击「设置与成员」，选择「集成」',
+  notion_step_3: '点击「开发新集成」或「关联集成」',
+  notion_step_4: '用相机对准本屏幕扫描二维码授权连接',
 };
 
 export default lang;
