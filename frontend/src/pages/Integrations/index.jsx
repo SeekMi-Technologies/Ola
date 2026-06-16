@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { Button, Input, Switch, Row, Col, message, Modal, QRCode, Spin } from 'antd';
+import { Button, Input, Select, Switch, Row, Col, message, Modal, QRCode, Spin } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { PageHeader } from '@ant-design/pro-layout';
 import useLanguage from '@/locale/useLanguage';
@@ -85,8 +85,9 @@ export default function IntegrationsPage() {
   // Notion mock state.
   const [isNotionModalOpen, setIsNotionModalOpen] = useState(false);
   const [notionStatusValue, setNotionStatusValue] = useState('disconnected');
-  const [notionQr, setNotionQr] = useState(null);
-  const [generatingNotionQr, setGeneratingNotionQr] = useState(false);
+  const [notionNickname, setNotionNickname] = useState('');
+  const [notionAccess, setNotionAccess] = useState('team');
+  const [isNotionConnecting, setIsNotionConnecting] = useState(false);
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -175,13 +176,10 @@ export default function IntegrationsPage() {
 
   const handleNotionSwitch = (checked) => {
     if (checked) {
-      setNotionQr(null);
-      setGeneratingNotionQr(true);
+      setNotionNickname('');
+      setNotionAccess('team');
+      setIsNotionConnecting(false);
       setIsNotionModalOpen(true);
-      setTimeout(() => {
-        setNotionQr('https://notion.so/mock-qr-code-wzh-ui-inte');
-        setGeneratingNotionQr(false);
-      }, 1500);
     } else {
       Modal.confirm({
         title: translate('notion_disconnect_confirm'),
@@ -190,7 +188,7 @@ export default function IntegrationsPage() {
         okButtonProps: { danger: true },
         onOk: () => {
           setNotionStatusValue('disconnected');
-          setNotionQr(null);
+          setNotionNickname('');
           message.info(`Notion ${translate('integration_disconnected')}`);
         },
       });
@@ -199,15 +197,21 @@ export default function IntegrationsPage() {
 
   const handleNotionModalCancel = () => {
     setIsNotionModalOpen(false);
-    if (notionStatusValue === 'connecting') {
-      setNotionStatusValue('disconnected');
-    }
+    setIsNotionConnecting(false);
   };
 
-  const handleNotionSimulateScan = () => {
-    setNotionStatusValue('connected');
-    setIsNotionModalOpen(false);
-    message.success(`Notion ${translate('integration_connected')}`);
+  const handleNotionConnect = () => {
+    if (!notionNickname.trim()) {
+      message.error(translate('zh') === 'zh' ? '请输入账户昵称' : 'Please enter a nickname for this account');
+      return;
+    }
+    setIsNotionConnecting(true);
+    setTimeout(() => {
+      setNotionStatusValue('connected');
+      setIsNotionConnecting(false);
+      setIsNotionModalOpen(false);
+      message.success(`Notion ${translate('integration_connected')}`);
+    }, 1000);
   };
 
   const handleSwitch = (item, checked) => {
@@ -458,7 +462,7 @@ export default function IntegrationsPage() {
         open={isNotionModalOpen}
         onCancel={handleNotionModalCancel}
         footer={null}
-        width={640}
+        width={520}
         centered
         styles={{
           content: {
@@ -467,43 +471,69 @@ export default function IntegrationsPage() {
           }
         }}
       >
-        <div style={{ display: 'flex', gap: '32px', padding: '24px 0 8px', alignItems: 'center' }}>
-          {/* Left Column: Instructions */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <ol style={{ paddingLeft: '20px', margin: 0, display: 'flex', flexDirection: 'column', gap: '14px', color: '#595959', fontSize: '14px', lineHeight: '1.6' }}>
-              <li>{translate('notion_step_1')}</li>
-              <li>{translate('notion_step_2')}</li>
-              <li>{translate('notion_step_3')}</li>
-              <li>{translate('notion_step_4')}</li>
-            </ol>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '16px 0 8px' }}>
+          {/* Form Content */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Field 1: Nickname */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '14px', fontWeight: 500, color: '#595959', fontFamily: 'Inter, system-ui, sans-serif' }}>
+                {translate('notion_nickname_label')}
+              </span>
+              <Input
+                placeholder={translate('notion_nickname_placeholder')}
+                value={notionNickname}
+                onChange={(e) => setNotionNickname(e.target.value)}
+                disabled={isNotionConnecting}
+                style={{
+                  height: '38px',
+                  borderRadius: '6px',
+                  borderColor: '#d9d9d9',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                }}
+              />
+            </div>
+
+            {/* Field 2: Access Level */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '14px', fontWeight: 500, color: '#595959', fontFamily: 'Inter, system-ui, sans-serif' }}>
+                {translate('notion_access_header')}
+              </span>
+              <Select
+                value={notionAccess}
+                onChange={(val) => setNotionAccess(val)}
+                disabled={isNotionConnecting}
+                style={{ width: '100%', height: '38px' }}
+                dropdownStyle={{ borderRadius: '8px' }}
+                options={[
+                  {
+                    value: 'team',
+                    label: translate('notion_access_team'),
+                  },
+                  {
+                    value: 'private',
+                    label: translate('notion_access_private'),
+                  },
+                ]}
+              />
+            </div>
           </div>
 
-          {/* Right Column: QR and Simulate Scan button */}
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', flexShrink: 0, gap: '16px' }}>
-            <div style={{ border: '1px solid #e8e8e8', borderRadius: '12px', padding: '12px', background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-              {generatingNotionQr ? (
-                <div style={{ width: 160, height: 160, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', color: '#8c8c8c', fontSize: 13 }}>
-                  <Spin />
-                  <span>{translate('notion_generating_qr')}</span>
-                </div>
-              ) : notionQr ? (
-                <QRCode value={notionQr} size={160} bordered={false} />
-              ) : (
-                <div style={{ width: 160, height: 160, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', color: '#8c8c8c', fontSize: 13 }}>
-                  <Spin />
-                  <span>{translate('notion_generating_qr')}</span>
-                </div>
-              )}
-            </div>
-            {!generatingNotionQr && notionQr && (
-              <Button
-                type="primary"
-                onClick={handleNotionSimulateScan}
-                style={{ borderRadius: '6px', width: '100%', fontWeight: 500 }}
-              >
-                {translate('zh') === 'zh' ? '模拟扫码接入' : 'Simulate Scan'}
-              </Button>
-            )}
+          {/* Footer Action Area */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: '12px' }}>
+            {/* Right Connect Button */}
+            <Button
+              type="primary"
+              onClick={handleNotionConnect}
+              loading={isNotionConnecting}
+              style={{
+                height: '38px',
+                borderRadius: '6px',
+                fontWeight: 500,
+                padding: '0 24px',
+              }}
+            >
+              {translate('notion_connect')}
+            </Button>
           </div>
         </div>
       </Modal>

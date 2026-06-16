@@ -847,12 +847,13 @@ const lang = {
   notion_status_connected: '已接入',
   notion_disconnect_confirm: '确定取消接入 Notion？',
   notion_disconnect: '取消接入',
-  notion_generating_qr: '正在生成二维码…',
-  notion_modal_title: '关联 Notion 工作区',
-  notion_step_1: '在您的设备或浏览器中打开 Notion',
-  notion_step_2: '点击「设置与成员」，选择「集成」',
-  notion_step_3: '点击「开发新集成」或「关联集成」',
-  notion_step_4: '用相机对准本屏幕扫描二维码授权连接',
+  notion_modal_title: '关联 Notion 账户',
+  notion_nickname_label: '账户昵称',
+  notion_nickname_placeholder: "团队账户 (Team's Account)",
+  notion_access_header: '谁有权访问？',
+  notion_access_team: '仅团队成员 (Team-only)',
+  notion_access_private: '私人 (仅限受邀者) (Private - Invite only)',
+  notion_connect: '连接',
 };
 
 export default lang;

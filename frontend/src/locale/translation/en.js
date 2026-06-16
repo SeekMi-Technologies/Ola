@@ -847,12 +847,13 @@ const lang = {
   notion_status_connected: 'Connected',
   notion_disconnect_confirm: 'Disconnect Notion?',
   notion_disconnect: 'Disconnect',
-  notion_generating_qr: 'Generating QR code…',
-  notion_modal_title: 'Connect a Notion workspace',
-  notion_step_1: 'Open Notion on your phone or web browser',
-  notion_step_2: 'Tap "Settings", then select "Connections"',
-  notion_step_3: 'Select "Link a new integration"',
-  notion_step_4: 'Point your camera at this screen to scan the QR code',
+  notion_modal_title: 'Connect a Notion account',
+  notion_nickname_label: 'Nickname for this account',
+  notion_nickname_placeholder: "Team's Account",
+  notion_access_header: 'Who should have access?',
+  notion_access_team: 'Team-only',
+  notion_access_private: 'Private (Invite only)',
+  notion_connect: 'Connect',
 };
 
 export default lang;
