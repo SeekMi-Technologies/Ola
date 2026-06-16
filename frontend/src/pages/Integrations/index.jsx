@@ -87,7 +87,6 @@ export default function IntegrationsPage() {
   const [notionStatusValue, setNotionStatusValue] = useState('disconnected');
   const [notionNickname, setNotionNickname] = useState('');
   const [notionAccess, setNotionAccess] = useState('team');
-  const [isNotionConnecting, setIsNotionConnecting] = useState(false);
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -178,7 +177,6 @@ export default function IntegrationsPage() {
     if (checked) {
       setNotionNickname('');
       setNotionAccess('team');
-      setIsNotionConnecting(false);
       setIsNotionModalOpen(true);
     } else {
       Modal.confirm({
@@ -189,7 +187,7 @@ export default function IntegrationsPage() {
         onOk: () => {
           setNotionStatusValue('disconnected');
           setNotionNickname('');
-          message.info(`Notion ${translate('integration_disconnected')}`);
+          message.info(translate('notion_disconnected_success'));
         },
       });
     }
@@ -197,21 +195,16 @@ export default function IntegrationsPage() {
 
   const handleNotionModalCancel = () => {
     setIsNotionModalOpen(false);
-    setIsNotionConnecting(false);
   };
 
   const handleNotionConnect = () => {
     if (!notionNickname.trim()) {
-      message.error(translate('zh') === 'zh' ? '请输入账户昵称' : 'Please enter a nickname for this account');
+      message.error(translate('notion_nickname_required'));
       return;
     }
-    setIsNotionConnecting(true);
-    setTimeout(() => {
-      setNotionStatusValue('connected');
-      setIsNotionConnecting(false);
-      setIsNotionModalOpen(false);
-      message.success(`Notion ${translate('integration_connected')}`);
-    }, 1000);
+    setNotionStatusValue('connected');
+    setIsNotionModalOpen(false);
+    message.success(translate('notion_connected_success'));
   };
 
   const handleSwitch = (item, checked) => {
@@ -474,7 +467,6 @@ export default function IntegrationsPage() {
                 placeholder={translate('notion_nickname_placeholder')}
                 value={notionNickname}
                 onChange={(e) => setNotionNickname(e.target.value)}
-                disabled={isNotionConnecting}
                 className="notion-modal-input"
               />
             </div>
@@ -487,7 +479,6 @@ export default function IntegrationsPage() {
               <Select
                 value={notionAccess}
                 onChange={(val) => setNotionAccess(val)}
-                disabled={isNotionConnecting}
                 className="notion-modal-select"
                 dropdownStyle={{ borderRadius: '8px' }}
                 options={[
@@ -510,7 +501,6 @@ export default function IntegrationsPage() {
             <Button
               type="primary"
               onClick={handleNotionConnect}
-              loading={isNotionConnecting}
               className="notion-modal-btn"
             >
               {translate('notion_connect')}

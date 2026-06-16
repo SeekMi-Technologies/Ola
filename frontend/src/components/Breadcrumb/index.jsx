@@ -84,8 +84,8 @@ export default function AppBreadcrumb() {
     });
   } else {
     pathnames.forEach((value, index) => {
-      // Skip rendering 'dashboard' segment if it happens to be present in subpaths to keep it clean
-      if (value.toLowerCase() === 'dashboard') return;
+      // Skip rendering 'dashboard' and 'edit' segments if they happen to be present in subpaths to keep it clean
+      if (value.toLowerCase() === 'dashboard' || value.toLowerCase() === 'edit') return;
 
       const translationKey = PATH_TRANSLATION_MAP[value.toLowerCase()] || value;
       const label = translate(translationKey) || value.charAt(0).toUpperCase() + value.slice(1);

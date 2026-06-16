@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Breadcrumb } from 'antd';
+import AppBreadcrumb from '@/components/Breadcrumb';
 
 import {
   SettingOutlined,
@@ -52,9 +52,9 @@ export default function Settings() {
     if (settingsKey) {
       setActiveKey(settingsKey);
     } else {
-      setActiveKey('profile');
+      navigate('/settings/edit/profile', { replace: true });
     }
-  }, [settingsKey]);
+  }, [settingsKey, navigate]);
 
   // Sidebar menu structure
   const sidebarSections = [
@@ -146,9 +146,6 @@ export default function Settings() {
     }
   };
 
-  const currentPanel = panelHeaders[activeKey] || panelHeaders.profile;
-  const currentCategory = activeKey === 'profile' ? 'Personal' : 'Workspace';
-
   return (
     <div className="settings-page-wrapper">
       {/* Top bar with back button */}
@@ -194,17 +191,7 @@ export default function Settings() {
         {/* Content area */}
         <div className="settings-content">
           <div className="settings-content-header">
-            <Breadcrumb
-              separator=">"
-              items={[
-                {
-                  title: translate(currentCategory),
-                },
-                {
-                  title: currentPanel.label,
-                },
-              ]}
-            />
+            <AppBreadcrumb />
           </div>
           <div className="settings-content-body">
             {renderContent()}
