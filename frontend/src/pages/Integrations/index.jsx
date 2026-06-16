@@ -454,29 +454,20 @@ export default function IntegrationsPage() {
 
       {/* Notion Connection Modal */}
       <Modal
-        title={
-          <div style={{ fontSize: '20px', fontWeight: '600', color: '#1f1f1f', fontFamily: 'Inter, system-ui, sans-serif', paddingBottom: '16px', borderBottom: '1px solid #f0f0f0' }}>
-            {translate('notion_modal_title')}
-          </div>
-        }
+        title={<div className="notion-modal-title">{translate('notion_modal_title')}</div>}
         open={isNotionModalOpen}
         onCancel={handleNotionModalCancel}
         footer={null}
         width={520}
         centered
-        styles={{
-          content: {
-            borderRadius: '16px',
-            padding: '24px 32px',
-          }
-        }}
+        className="notion-connect-modal"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '16px 0 8px' }}>
+        <div className="notion-modal-body">
           {/* Form Content */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="notion-modal-form">
             {/* Field 1: Nickname */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '14px', fontWeight: 500, color: '#595959', fontFamily: 'Inter, system-ui, sans-serif' }}>
+            <div className="notion-modal-field">
+              <span className="notion-modal-label">
                 {translate('notion_nickname_label')}
               </span>
               <Input
@@ -484,25 +475,20 @@ export default function IntegrationsPage() {
                 value={notionNickname}
                 onChange={(e) => setNotionNickname(e.target.value)}
                 disabled={isNotionConnecting}
-                style={{
-                  height: '38px',
-                  borderRadius: '6px',
-                  borderColor: '#d9d9d9',
-                  fontFamily: 'Inter, system-ui, sans-serif',
-                }}
+                className="notion-modal-input"
               />
             </div>
 
             {/* Field 2: Access Level */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '14px', fontWeight: 500, color: '#595959', fontFamily: 'Inter, system-ui, sans-serif' }}>
+            <div className="notion-modal-field">
+              <span className="notion-modal-label">
                 {translate('notion_access_header')}
               </span>
               <Select
                 value={notionAccess}
                 onChange={(val) => setNotionAccess(val)}
                 disabled={isNotionConnecting}
-                style={{ width: '100%', height: '38px' }}
+                className="notion-modal-select"
                 dropdownStyle={{ borderRadius: '8px' }}
                 options={[
                   {
@@ -519,18 +505,13 @@ export default function IntegrationsPage() {
           </div>
 
           {/* Footer Action Area */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: '12px' }}>
+          <div className="notion-modal-footer">
             {/* Right Connect Button */}
             <Button
               type="primary"
               onClick={handleNotionConnect}
               loading={isNotionConnecting}
-              style={{
-                height: '38px',
-                borderRadius: '6px',
-                fontWeight: 500,
-                padding: '0 24px',
-              }}
+              className="notion-modal-btn"
             >
               {translate('notion_connect')}
             </Button>
