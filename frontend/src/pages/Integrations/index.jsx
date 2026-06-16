@@ -257,7 +257,7 @@ export default function IntegrationsPage() {
           const isConnected = isItemConnected(item);
           const statusValue = item.id === 'whatsapp' ? waStatusValue : 'disconnected';
           return (
-            <Col xs={24} sm={12} md={8} key={item.id}>
+            <Col xs={24} sm={12} md={12} key={item.id}>
               <div
                 className={`whiteBox shadow integration-card${isConnected ? ' integration-card--connected' : ''}`}
                 style={{ cursor: 'default' }}
