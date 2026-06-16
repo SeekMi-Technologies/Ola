@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Breadcrumb } from 'antd';
 
 import {
   SettingOutlined,
@@ -50,6 +51,8 @@ export default function Settings() {
   useEffect(() => {
     if (settingsKey) {
       setActiveKey(settingsKey);
+    } else {
+      setActiveKey('profile');
     }
   }, [settingsKey]);
 
@@ -144,6 +147,7 @@ export default function Settings() {
   };
 
   const currentPanel = panelHeaders[activeKey] || panelHeaders.profile;
+  const currentCategory = activeKey === 'profile' ? 'Personal' : 'Workspace';
 
   return (
     <div className="settings-page-wrapper">
@@ -166,7 +170,10 @@ export default function Settings() {
                 <div
                   key={item.key}
                   className={`settings-sidebar-item ${activeKey === item.key ? 'active' : ''}`}
-                  onClick={() => setActiveKey(item.key)}
+                  onClick={() => {
+                    setActiveKey(item.key);
+                    navigate(`/settings/edit/${item.key}`);
+                  }}
                 >
                   {item.icon}
                   <span>{item.label}</span>
@@ -187,8 +194,31 @@ export default function Settings() {
         {/* Content area */}
         <div className="settings-content">
           <div className="settings-content-header">
-            {currentPanel.icon}
-            <span>{currentPanel.label}</span>
+            <Breadcrumb
+              separator={<span style={{ color: '#bfbfbf', margin: '0 4px' }}>&gt;</span>}
+              items={[
+                {
+                  title: (
+                    <span style={{ color: '#8c8c8c', fontWeight: 400 }}>
+                      {translate(currentCategory)}
+                    </span>
+                  ),
+                },
+                {
+                  title: (
+                    <span style={{ color: '#595959', fontWeight: 500 }}>
+                      {currentPanel.label}
+                    </span>
+                  ),
+                },
+              ]}
+              style={{
+                fontSize: '13px',
+                fontFamily: 'Inter, system-ui, sans-serif',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            />
           </div>
           <div className="settings-content-body">
             {renderContent()}

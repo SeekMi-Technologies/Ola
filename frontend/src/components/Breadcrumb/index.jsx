@@ -20,6 +20,8 @@ const PATH_TRANSLATION_MAP = {
   profile: 'Profile',
   control: 'Tasks',
   mode: 'Payment Mode',
+  general_settings: 'Company',
+  currency_settings: 'Currency Settings',
   create: 'create',
   edit: 'edit',
   list: 'list',
@@ -62,7 +64,12 @@ export default function AppBreadcrumb() {
 
   // Determine Category based on first segment
   const primarySegment = pathnames[0] ? pathnames[0].toLowerCase() : '';
-  const category = ROUTE_CATEGORY_MAP[primarySegment] || 'Main';
+  let category = ROUTE_CATEGORY_MAP[primarySegment] || 'Main';
+
+  if (primarySegment === 'settings') {
+    const isWorkspaceTab = pathnames.includes('general_settings') || pathnames.includes('currency_settings');
+    category = isWorkspaceTab ? 'Workspace' : 'Personal';
+  }
 
   const breadcrumbItems = [
     {
