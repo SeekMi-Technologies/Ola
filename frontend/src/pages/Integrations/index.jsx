@@ -15,6 +15,11 @@ const INTEGRATIONS_DATA = [
     name: 'WhatsApp',
     popular: true,
     descriptionKey: 'integration_desc_whatsapp',
+    statusKeys: {
+      disconnected: 'whatsapp_status_disconnected',
+      qr_pending: 'whatsapp_status_connecting',
+      connected: 'whatsapp_status_connected',
+    },
     logo: (
       <img
         src={whatsappLogo}
@@ -28,6 +33,11 @@ const INTEGRATIONS_DATA = [
     name: 'Notion',
     popular: true,
     descriptionKey: 'integration_desc_notion',
+    statusKeys: {
+      disconnected: 'notion_status_disconnected',
+      connecting: 'notion_status_connecting',
+      connected: 'notion_status_connected',
+    },
     logo: (
       <img
         src={notionLogo}
@@ -39,22 +49,7 @@ const INTEGRATIONS_DATA = [
 ];
 
 // Observed bridge status → i18n label key + accent color.
-const labelKeyFor = (item, s) => {
-  if (item.id === 'whatsapp') {
-    const keys = {
-      disconnected: 'whatsapp_status_disconnected',
-      qr_pending: 'whatsapp_status_connecting',
-      connected: 'whatsapp_status_connected',
-    };
-    return keys[s] || keys.disconnected;
-  }
-  const keys = {
-    disconnected: 'notion_status_disconnected',
-    connecting: 'notion_status_connecting',
-    connected: 'notion_status_connected',
-  };
-  return keys[s] || keys.disconnected;
-};
+const labelKeyFor = (item, s) => item.statusKeys[s] || item.statusKeys.disconnected;
 
 const colorFor = (s) => {
   const colors = {
@@ -77,14 +72,16 @@ export default function IntegrationsPage() {
   const showConnectedOnly = false;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Per-integration status map — keyed by integration id.
+  const [statuses, setStatuses] = useState({ whatsapp: 'disconnected', notion: 'disconnected' });
+  const setStatus = (id, value) => setStatuses((prev) => ({ ...prev, [id]: value }));
+
   // WhatsApp live state, pulled from the bridge via the CRM proxy.
-  const [waStatusValue, setWaStatusValue] = useState('disconnected');
   const [waQr, setWaQr] = useState(null);
   const pollRef = useRef(null);
 
   // Notion mock state.
   const [isNotionModalOpen, setIsNotionModalOpen] = useState(false);
-  const [notionStatusValue, setNotionStatusValue] = useState('disconnected');
   const [notionNickname, setNotionNickname] = useState('');
   const [notionAccess, setNotionAccess] = useState('team');
 
@@ -96,12 +93,8 @@ export default function IntegrationsPage() {
   };
 
   const isItemConnected = useCallback(
-    (item) => {
-      if (item.id === 'whatsapp') return waStatusValue === 'connected';
-      if (item.id === 'notion') return notionStatusValue === 'connected';
-      return false;
-    },
-    [waStatusValue, notionStatusValue]
+    (item) => statuses[item.id] === 'connected',
+    [statuses]
   );
 
   // Map an error to the right localized toast (503 = gateway down).
@@ -112,7 +105,7 @@ export default function IntegrationsPage() {
 
   const applyStatus = (result) => {
     const next = result?.status || 'disconnected';
-    setWaStatusValue(next);
+    setStatus('whatsapp', next);
     setWaQr(result?.qr || null);
     if (next === 'connected') {
       stopPolling();
@@ -128,7 +121,7 @@ export default function IntegrationsPage() {
     } catch (err) {
       stopPolling();
       setIsModalOpen(false);
-      setWaStatusValue('disconnected');
+      setStatus('whatsapp', 'disconnected');
       toastError(err);
     }
   };
@@ -144,11 +137,11 @@ export default function IntegrationsPage() {
     setIsModalOpen(true);
     try {
       const res = await waLogin();
-      setWaStatusValue(res.result?.status || 'qr_pending');
+      setStatus('whatsapp', res.result?.status || 'qr_pending');
       startPolling();
     } catch (err) {
       setIsModalOpen(false);
-      setWaStatusValue('disconnected');
+      setStatus('whatsapp', 'disconnected');
       toastError(err);
     }
   };
@@ -163,7 +156,7 @@ export default function IntegrationsPage() {
         try {
           await waLogout();
           stopPolling();
-          setWaStatusValue('disconnected');
+          setStatus('whatsapp', 'disconnected');
           setWaQr(null);
           message.info(`WhatsApp ${translate('integration_disconnected')}`);
         } catch (err) {
@@ -185,7 +178,7 @@ export default function IntegrationsPage() {
         cancelText: translate('cancel'),
         okButtonProps: { danger: true },
         onOk: () => {
-          setNotionStatusValue('disconnected');
+          setStatus('notion', 'disconnected');
           setNotionNickname('');
           message.info(translate('notion_disconnected_success'));
         },
@@ -202,7 +195,7 @@ export default function IntegrationsPage() {
       message.error(translate('notion_nickname_required'));
       return;
     }
-    setNotionStatusValue('connected');
+    setStatus('notion', 'connected');
     setIsNotionModalOpen(false);
     message.success(translate('notion_connected_success'));
   };
@@ -221,10 +214,10 @@ export default function IntegrationsPage() {
   // instead of a stuck "connecting".
   const handleModalCancel = () => {
     setIsModalOpen(false);
-    if (waStatusValue === 'qr_pending') {
+    if (statuses.whatsapp === 'qr_pending') {
       stopPolling();
       setWaQr(null);
-      setWaStatusValue('disconnected');
+      setStatus('whatsapp', 'disconnected');
       waLogout().catch((err) => console.warn('WhatsApp connect cancel teardown failed:', err?.message));
     }
   };
@@ -234,7 +227,7 @@ export default function IntegrationsPage() {
     (async () => {
       try {
         const res = await waStatus();
-        setWaStatusValue(res.result?.status || 'disconnected');
+        setStatus('whatsapp', res.result?.status || 'disconnected');
         setWaQr(res.result?.qr || null);
       } catch (err) {
         // Don't error-toast just for opening the page, but log for debugging.
@@ -331,12 +324,7 @@ export default function IntegrationsPage() {
       <Row gutter={[24, 24]}>
         {filteredIntegrations.map((item) => {
           const isConnected = isItemConnected(item);
-          const statusValue =
-            item.id === 'whatsapp'
-              ? waStatusValue
-              : item.id === 'notion'
-              ? notionStatusValue
-              : 'disconnected';
+          const statusValue = statuses[item.id] ?? 'disconnected';
           return (
             <Col xs={24} sm={12} md={12} key={item.id}>
               <div

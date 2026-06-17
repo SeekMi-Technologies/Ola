@@ -4,54 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { selectReadItem } from '@/redux/erp/selectors';
 import useLanguage from '@/locale/useLanguage';
-
-// Mapping path segments to localized translation keys
-const PATH_TRANSLATION_MAP = {
-  dashboard: 'Dashboard',
-  askola: 'Ask Ola',
-  file: 'file',
-  integrations: 'integrations',
-  customer: 'Customers',
-  merchandise: 'Merchandise',
-  factory: 'Factory',
-  invoice: 'Invoice',
-  quote: 'Quote',
-  purchaseorder: 'Purchase Orders',
-  payment: 'Payment',
-  settings: 'Settings',
-  profile: 'Profile',
-  control: 'Tasks',
-  mode: 'Payment Mode',
-  general_settings: 'Company',
-  currency_settings: 'Currency Settings',
-  create: 'create',
-  edit: 'edit',
-  list: 'list',
-};
-
-// Route Category Map based on the first path segment
-const ROUTE_CATEGORY_MAP = {
-  // Main
-  '': 'Main',
-  'dashboard': 'Main',
-  'askola': 'Main',
-  'file': 'Main',
-  'integrations': 'Main',
-  'control': 'Main',
-  'settings': 'Workspace',
-  'profile': 'Personal',
-
-  // Business
-  'customer': 'Business',
-  'merchandise': 'Business',
-  'factory': 'Business',
-
-  // Finance
-  'quote': 'Finance',
-  'purchaseorder': 'Finance',
-  'invoice': 'Finance',
-  'payment': 'Finance',
-};
+import { PATH_TRANSLATION_MAP, ROUTE_CATEGORY_MAP } from './breadcrumbConfig';
 
 export default function AppBreadcrumb() {
   const location = useLocation();
