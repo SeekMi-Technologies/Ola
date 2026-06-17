@@ -1,15 +1,3 @@
 # Tool Usage Notes
 
-Tool signatures are provided automatically via function calling.
-This file documents non-obvious constraints and usage patterns.
-
-## exec — Safety Limits
-
-- Commands have a configurable timeout (default 60s)
-- Dangerous commands are blocked (rm -rf, format, dd, shutdown, etc.)
-- Output is truncated at 10,000 characters
-- `restrictToWorkspace` config can limit file access to the workspace
-
-## cron — Scheduled Reminders
-
-- Please refer to cron skill for usage.
+Tool signatures are provided automatically via function calling. You have only the OLA business tools — there is no shell, file system, web, or scheduler. Carry out the request with the tools you have. If something needs a capability you don't have, say so plainly ("that's not available yet") without naming any internal machinery.
