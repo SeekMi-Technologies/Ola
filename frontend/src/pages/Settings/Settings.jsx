@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import AppBreadcrumb from '@/components/Breadcrumb';
 
 import {
   SettingOutlined,
@@ -50,8 +51,10 @@ export default function Settings() {
   useEffect(() => {
     if (settingsKey) {
       setActiveKey(settingsKey);
+    } else {
+      navigate('/settings/edit/profile', { replace: true });
     }
-  }, [settingsKey]);
+  }, [settingsKey, navigate]);
 
   // Sidebar menu structure
   const sidebarSections = [
@@ -143,8 +146,6 @@ export default function Settings() {
     }
   };
 
-  const currentPanel = panelHeaders[activeKey] || panelHeaders.profile;
-
   return (
     <div className="settings-page-wrapper">
       {/* Top bar with back button */}
@@ -166,7 +167,10 @@ export default function Settings() {
                 <div
                   key={item.key}
                   className={`settings-sidebar-item ${activeKey === item.key ? 'active' : ''}`}
-                  onClick={() => setActiveKey(item.key)}
+                  onClick={() => {
+                    setActiveKey(item.key);
+                    navigate(`/settings/edit/${item.key}`);
+                  }}
                 >
                   {item.icon}
                   <span>{item.label}</span>
@@ -187,8 +191,7 @@ export default function Settings() {
         {/* Content area */}
         <div className="settings-content">
           <div className="settings-content-header">
-            {currentPanel.icon}
-            <span>{currentPanel.label}</span>
+            <AppBreadcrumb />
           </div>
           <div className="settings-content-body">
             {renderContent()}
