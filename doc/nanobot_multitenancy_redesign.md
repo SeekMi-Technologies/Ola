@@ -61,7 +61,7 @@
 
 所以不引入第二个 list（那会让 `"SOUL.md"` 这种字符串重复、两处易漂移）。改成 **文件 → 作用域 的声明式映射 + 一个枚举**，作用域只声明一次。
 
-resolver 基于 `self.workspace`（当前进程的工作区根），因此对 serve 的 `api-workspace` 和 gateway 的 `workspace` **自动都生效**，无需区分进程。
+resolver 基于 `self.workspace`（进程的工作区根）。WS-D（§9）后 serve 与 gateway 共用同一个 workspace，所以解析对两个进程一致，per-admin 覆盖也只有一份。
 
 ### 安全约束（影响实现）
 
@@ -126,12 +126,17 @@ def resolve_overridable_file(self, filename: str) -> Path:
 nanobot 现在**跑在 docker**（CI/CD，GitHub Actions）。镜像 `ghcr.io/seekmi-technologies/ola-nanobot:<tag>`，Box2 上三个容器：`nanobot-api`(serve 8900) / `nanobot-gateway`(8901) / `nanobot-bridge`(3001)。
 
 - 状态目录：宿主机 `${NANOBOT_STATE_DIR}`（prod = `/opt/ola-production/nanobot-state`）**bind-mount** 到容器 `/home/nanobot/.nanobot`，容器 uid 1000。
-- **两个独立 workspace**（serve 和 gateway 不共用）：
-  - askola/serve → `${NANOBOT_STATE_DIR}/api-workspace/`
-  - channels/gateway（email、WhatsApp）→ `${NANOBOT_STATE_DIR}/workspace/`
-- 每个 workspace 内的布局：
+- **单一共享 workspace**（serve 和 gateway 共用，WS-D 已合并，见 §9）：`${NANOBOT_STATE_DIR}/workspace/` —— config（人设）与 state（memory/sessions）同处一处。
+
+```mermaid
+flowchart LR
+  serve["nanobot-api / serve (8900)"] --> ws["NANOBOT_STATE_DIR/workspace/"]
+  gateway["nanobot-gateway (8901)"] --> ws
+```
+
+- workspace 内布局：
   ```
-  api-workspace/  (和 workspace/ 同构)
+  workspace/
   ├── AGENTS.md  SOUL.md  TOOLS.md        # 全局；deploy 时被 repo 模板覆盖
   └── admins/<adminId>/
       ├── USER.md                         # #354 lazy provisioning 播种
@@ -140,14 +145,12 @@ nanobot 现在**跑在 docker**（CI/CD，GitHub Actions）。镜像 `ghcr.io/se
   ```
 
 **手改某用户人设：** 因为是 bind-mount，改宿主机目录 = 容器立即可见（同 inode）。直接编辑
-`${NANOBOT_STATE_DIR}/api-workspace/admins/<adminId>/SOUL.md`（channels 用户走 `/workspace/...`），
+`${NANOBOT_STATE_DIR}/workspace/admins/<adminId>/SOUL.md`（serve 与 channels 现在同一份），
 **不用进容器、不用重启**（prompt 读时解析，下一条消息即生效）。改完 `chown 1000:1000`。
 
-**⚠️ 两个坑：**
-1. 全局根 `SOUL/AGENTS/TOOLS.md` 由 `deploy/provision-nanobot-workspaces.sh` **每次部署覆盖**（源 = repo `ola/nanobot-workspace/`）。改全局人设**必须改 repo 模板并 commit**，绝不在 box 上手改根文件。`admins/<id>/` 下的 per-admin 覆盖文件 provisioner **不碰**，手改安全。
-2. serve 和 gateway 是**两个 workspace** —— 同一个 admin 在 askola 和在 WhatsApp/email 用的是**不同目录**的文件。手改人设要清楚目标渠道改对应那个。
+**⚠️ 坑：** 全局根 `SOUL/AGENTS/TOOLS.md` 由 `deploy/provision-nanobot-workspaces.sh` **每次部署覆盖**（源 = repo `ola/nanobot-workspace/`）。改全局人设**必须改 repo 模板并 commit**，绝不在 box 上手改根文件。`admins/<id>/` 下的 per-admin 覆盖文件 provisioner **不碰**，手改安全。（WS-D 后 serve 与 gateway 同一个 workspace，同一 admin 跨渠道用同一份文件，不再需要分渠道改。）
 
-### 为什么有两个 workspace —— 根因与长期修法
+### 为什么曾有两个 workspace —— 根因与长期修法
 
 **根因：nanobot 是两个独立进程，不是一个。**
 
@@ -161,13 +164,13 @@ nanobot 现在**跑在 docker**（CI/CD，GitHub Actions）。镜像 `ghcr.io/se
 
 **判断：这个切分把"会变的运行时状态"隔开是对的；但它是钝刀，把整个 workspace 都切了，顺带把 `SOUL/TOOLS/USER` 这些只读 config 也切成两份 —— 人设根本不需要按进程隔离，是被误伤。** 这就是"同一 admin 两份人设、会人格分裂"的来源。
 
-**长期修法（单独拍，现在不做）：** 把 workspace 拆成 **共享只读 config（persona / skills，一份）** + **per-进程可变状态（sessions / memory，各一份）**。那样人设天然只有一份，session/memory 仍隔离。人设控制面 API（§8）的设计要朝这个方向兼容：**现在"两份一起写"，将来 config 合一后改成"写一份"，上层 API 与 UI 不变。**
+**长期修法（仍待做 —— WS-D §9 已先把两个 workspace 合一作为 interim，config 因此单一真相；尚未隔离 state）：** 把 workspace 拆成 **共享只读 config（persona / skills，一份）** + **per-进程可变状态（sessions / memory，各一份）**。那样人设天然只有一份，session/memory 仍隔离。人设控制面 API（§8）写 per-admin 覆盖一份即可 —— WS-D（§9）已把 config 合一，剩下只差把 state 也隔离（即本条长期修法），上层 API 与 UI 都不用变。
 
 ### deploy provisioner vs #354 lazy provisioning（互补，不冲突）
 
 | | 作用域 | 时机 | 管什么 |
 |---|---|---|---|
-| `provision-nanobot-workspaces.sh`（已有） | 全局根文件 | 每次 deploy | 同步 SOUL/AGENTS/TOOLS + 首次播 USER/HEARTBEAT，**两个 workspace** |
+| `provision-nanobot-workspaces.sh`（已有） | 全局根文件 | 每次 deploy | 同步 SOUL/AGENTS/TOOLS + 首次播 USER/HEARTBEAT，**单一 workspace**（WS-D §9） |
 | #354 `provision_admin()`（要做） | `admins/<id>/` | 首次 `set_acting_as` | 建 per-admin 目录 + 播 USER.md + memory 骨架 |
 
 deploy provisioner 不碰 per-admin 目录，所以两者正交。
@@ -203,7 +206,7 @@ deploy provisioner 不碰 per-admin 目录，所以两者正交。
 devboard 前端 (人设管理页)
   → devboard 后端 (BFF，持 service token)
     → nanobot 内部控制面 API (Tailscale, /internal/persona/*)
-      → nanobot 读写它自己的 workspace FS（两个 workspace 一起写，见 §5 长期修法）
+      → nanobot 读写它自己的 workspace FS（单一 workspace，WS-D §9）
 ```
 
 放 devboard 而非 CRM：CRM 面向客户，"改任意用户人设"是内部超能力 → 属内部 ops 控制台（devboard，已在做 #380 LLM Tracing）。CRM 保持干净。BFF 必须存在：控制面在 Tailscale 内网 + service token，浏览器既到不了也不能裸持 token。
@@ -211,7 +214,7 @@ devboard 前端 (人设管理页)
 ### 8.3 API 形态（复用 #353 resolver）
 
 - `GET /internal/persona/:adminId` → 每个文件的**生效内容 + 来源**（global 默认 / per-admin 覆盖）。来源判定正是 #353 `resolve_overridable_file` 的产物。
-- `PUT /internal/persona/:adminId/{SOUL.md|TOOLS.md|USER.md}` → 写 per-admin 覆盖文件，**两个 workspace 同时写**。
+- `PUT /internal/persona/:adminId/{SOUL.md|TOOLS.md|USER.md}` → 写 per-admin 覆盖文件（单一 workspace，只写一份）。
 - `AGENTS.md` 只读（安全层，永不 per-admin）。service-token 鉴权，Tailscale-only，不公网。
 - 协同：**#353 造解析原语 → P-A 把它暴露 → P-B 给 UI**。所以排在 #353/#354 之后。
 
@@ -231,3 +234,27 @@ devboard 前端 (人设管理页)
 - 那时把同样能力**下放给终端用户**（self-serve 人设）= 把 devboard 页面换皮搬进 CRM。
 
 所以 P-A 的接口现在就按"资源"语义设计，为后面铺路，不返工。
+
+## 9. WS-D — 消除双 workspace（interim：直接合一）
+
+PR #15（#353/#354 地基）把这件事作为独立 PR 交接给 Binghan，原话 "drop serve's `-w api-workspace` so serve + gateway share one workspace"。本节是它的落点。
+
+**做了什么：** 去掉 `nanobot-api`（serve）的 `-w api-workspace`，让 serve 与 gateway 都用默认 `~/.nanobot/workspace`（宿主 `${NANOBOT_STATE_DIR}/workspace`）。`api-workspace/` 不再使用。
+
+**改动（纯 docker/CD，两个 repo）：**
+- `Ola_bot/docker-compose.yml`：`nanobot-api` command 去掉 `-w` → `["serve", "--host", "0.0.0.0", "--port", "8900"]`。
+- `Ola/deploy/provision-nanobot-workspaces.sh`：只 provision 单一 `workspace`（原 `for workspace in workspace api-workspace` 循环去掉）。
+- 本文档 §4 / §5 / §8 的"两个 workspace"表述同步更新。
+- deploy workflow（`deploy-staging.yml` / `deploy-production.yml`）无 `api-workspace` 直接引用，无需改。
+
+**为什么是 interim（而非 §5 的长期正解）：** §5 的长期修法是"共享只读 config + per-进程 state 各一份"，需要 nanobot core 改动（在 workspace root 之外再引入 state root）。WS-D 没动 core，直接让两进程共用同一个 workspace —— **config 因此单一真相（人设不再人格分裂）✓**，但 state（`admins/<id>/{memory,sessions}`）也被两进程共写。
+
+**有界的并发风险（可接受的原因）：**
+- sessions 不冲突：serve 用 askola session key，gateway 用渠道 `chat_id` key → `admins/<id>/sessions/` 下是不同文件。
+- 唯一共写点是 `admins/<id>/memory/{history.jsonl,.cursor}`，且只在**同一 admin 同时**在 askola 与 WhatsApp 交错下笔时才竞争 —— 罕见。
+- 本 epic **Dream / cron 全程禁用**（§3-D3），`MEMORY.md` / `.dream_cursor` 的整理写入路径不活动。
+- 本地开发早已是单 workspace 跑 serve+gateway（`start-dev.sh` 两个进程都不带 `-w`），未见损坏。
+
+**迁移（prod，一次性）：** 旧 `api-workspace/admins/<id>/{memory,sessions}`（serve/askola）与 `workspace/...`（gateway/渠道）是两份独立 state。合一后 serve 读写 `workspace/`。鉴于 Dream 禁用、epic 刚起量小：以 `workspace/` 为准、归档 `api-workspace/`（`mv api-workspace api-workspace.bak`）即可；若 `api-workspace/admins/<id>/` 里有**手放的 per-admin SOUL/TOOLS 覆盖**，先拷进 `workspace/admins/<id>/` 再归档。落地前确认 prod 实际内容。
+
+**长期正解仍是 §5：** 当同一 admin 跨渠道并发、或 per-admin 覆盖真正投产使残留风险变实，再做 core 改动 —— 给 serve 一个独立 `--state-dir`（`state_root` 与 config workspace 分离，默认相等、向后兼容），config 留在共享 workspace、state 各进程一份。
