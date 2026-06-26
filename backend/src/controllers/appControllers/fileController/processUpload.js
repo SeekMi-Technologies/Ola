@@ -39,7 +39,7 @@ function safeExt(originalname) {
  * @returns {Promise<{ fileDoc: object, transcriptionJobId: object|null, deduped: boolean }>}
  */
 async function processUpload(file, admin, options = {}) {
-  const { transcribeVideo = false, skipTranscription = false } = options;
+  const { transcribeVideo = false } = options;
   const adminId = admin._id.toString();
 
   // SHA256 content hash + per-admin dedup
@@ -85,9 +85,7 @@ async function processUpload(file, admin, options = {}) {
   // Auto-trigger transcription for audio (and optionally video)
   let transcriptionJobId = null;
   const mime = file.mimetype || 'audio/ogg';
-  const shouldTranscribe =
-    !skipTranscription &&
-    (mime.startsWith('audio/') || (transcribeVideo && mime.startsWith('video/')));
+  const shouldTranscribe = mime.startsWith('audio/') || (transcribeVideo && mime.startsWith('video/'));
   if (shouldTranscribe) {
     const job = await JobModel.create({
       createdBy: adminId,

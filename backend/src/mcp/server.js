@@ -15,9 +15,6 @@ require('module-alias/register');
 require('dotenv').config({ path: '.env' });
 require('dotenv').config({ path: '.env.local' });
 
-const path = require('path');
-const fs = require('fs').promises;
-const mongoose = require('mongoose');
 const express = require('express');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const {
@@ -260,8 +257,7 @@ async function main() {
           return res.status(400).json({ ok: false, code: 'VALIDATION', message: 'Missing file field' });
         }
 
-        const skipTranscription = req.headers['x-skip-transcription'] === 'true';
-        const result = await processUpload(req.file, req.admin, { transcribeVideo: true, skipTranscription });
+        const result = await processUpload(req.file, req.admin, { transcribeVideo: true });
         const { fileDoc, transcriptionJobId, deduped } = result;
 
         if (deduped) {
@@ -281,86 +277,6 @@ async function main() {
         });
       } catch (err) {
         console.error('[internal/upload-audio] error:', err);
-        return res.status(500).json({ ok: false, code: 'INTERNAL', message: err.message });
-      }
-    }
-  );
-
-  // ── POST /internal/set-transcript ────────────────────────────────────
-  // Called by nanobot WhatsApp channel after transcribing an audio file locally.
-  // Writes the transcript text as a sidecar .txt file and creates a completed
-  // Job doc so file.get_transcript MCP tool can serve the result.
-  // Idempotent: if File already has a done transcription Job, returns { ok: true, skipped: true }.
-  const setTranscriptJsonParser = express.json({ limit: '10mb' });
-
-  app.post(
-    '/internal/set-transcript',
-    requireAuth,
-    async (req, res, next) => {
-      const decision = await decideActingAdmin(req.headers['x-acting-as'], 'internal/set-transcript');
-      if (!decision.ok) {
-        return res.status(decision.status).json({ ok: false, code: decision.code, message: decision.message });
-      }
-      req.admin = decision.actingAdmin;
-      next();
-    },
-    setTranscriptJsonParser,
-    async (req, res) => {
-      try {
-        const { fileId, text } = req.body || {};
-        if (!fileId || typeof fileId !== 'string' || fileId.trim() === '') {
-          return res.status(400).json({ ok: false, code: 'VALIDATION', message: 'fileId is required' });
-        }
-        if (!text || typeof text !== 'string' || text.trim() === '') {
-          return res.status(400).json({ ok: false, code: 'VALIDATION', message: 'text is required' });
-        }
-
-        const FileModel = mongoose.model('File');
-        const JobModel = mongoose.model('Job');
-        const { resolveUploadPath } = require('@/utils/uploadsPath');
-
-        const fileDoc = await FileModel.findOne({
-          _id: fileId,
-          createdBy: req.admin._id,
-          removed: false,
-        });
-        if (!fileDoc) {
-          return res.status(404).json({ ok: false, code: 'NOT_FOUND', message: 'File not found' });
-        }
-
-        // Idempotent: skip if a completed Job already exists
-        if (fileDoc.transcriptionJobId) {
-          const existingJob = await JobModel.findById(fileDoc.transcriptionJobId).select('status').lean();
-          if (existingJob && existingJob.status === 'done') {
-            return res.status(200).json({ ok: true, skipped: true });
-          }
-        }
-
-        const relativeSidecarPath = fileDoc.sourcePath + '.txt';
-        const absoluteSidecarPath = resolveUploadPath(relativeSidecarPath);
-        await fs.mkdir(path.dirname(absoluteSidecarPath), { recursive: true });
-        await fs.writeFile(absoluteSidecarPath, text, 'utf-8');
-
-        const sizeBytes = Buffer.byteLength(text, 'utf-8');
-        const job = await JobModel.create({
-          createdBy: req.admin._id,
-          type: 'transcription',
-          refModel: 'File',
-          refId: fileDoc._id,
-          status: 'done',
-          result: {
-            sidecarPath: relativeSidecarPath,
-            sizeBytes,
-            durationMs: 0,
-            provider: 'nanobot-channel',
-          },
-        });
-        await FileModel.findByIdAndUpdate(fileDoc._id, { transcriptionJobId: job._id });
-
-        console.log(`[internal/set-transcript] fileId=${fileDoc._id} sidecar=${relativeSidecarPath} bytes=${sizeBytes}`);
-        return res.status(200).json({ ok: true, fileId: fileDoc._id, sidecarPath: relativeSidecarPath });
-      } catch (err) {
-        console.error('[internal/set-transcript] error:', err);
         return res.status(500).json({ ok: false, code: 'INTERNAL', message: err.message });
       }
     }
