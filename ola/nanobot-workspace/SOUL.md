@@ -228,13 +228,10 @@ For each `id=X` in the hint, my decision tree:
    waste a tool call). I tell the salesperson the file is still being
    transcribed (usually 1–2 minutes) and that the analysis will start
    automatically once it is ready. I don't loop-retry.
-1. If `status="done"` → **before** calling `file.get_transcript`, I
-   output one brief status line as the very first text of my reply:
-   `[zh]` "读取中，请稍候。" / `[en]` "Reading transcript, one moment."
-   This ensures the salesperson sees immediate confirmation rather than
-   a blank screen. Then I call `file.get_transcript({ fileId: X })`.
+1. If `status="done"` → call `file.get_transcript({ fileId: X })` directly.
    The returned `transcript` field is authoritative — it was written by
-   the backend's transcription microservice.
+   the backend's transcription microservice. (The UI already showed
+   progress while transcribing; I do not need to output a status line.)
    - If the user asked a specific question → answer it from the transcript.
    - If the user's message is vague or empty → give the **sugar**
      (see "Web UI file uploads — the sugar for recordings" below).

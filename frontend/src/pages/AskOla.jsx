@@ -108,41 +108,6 @@ export default function AskOla() {
     setMessages([]);
   };
 
-  // Fired by ChatInput when an attached file finishes transcription
-  // (or hits dedup — already-transcribed). If Ola is idle, silently
-  // auto-triggers agent analysis (no user bubble). If busy, falls back to
-  // a system notification so the user knows to ask again when Ola is free.
-  const handleTranscriptionComplete = ({ fileId, originalName, durationMs, sidecarBytes, deduped }) => {
-    if (!loading) {
-      // Auto-trigger: agent receives [auto-analyze] + fileId with status="done"
-      // and replies with the sugar. No user bubble shown (issue #387).
-      handleAutoAnalyze(fileId);
-      return;
-    }
-    // Fallback: Ola is busy — show notification so user knows transcript is ready.
-    const seconds = durationMs ? Math.round(durationMs / 1000) : null;
-    const sizeKb = sidecarBytes ? (sidecarBytes / 1024).toFixed(1) : null;
-    const detail = [
-      seconds !== null ? `${seconds}s` : null,
-      sizeKb !== null ? `${sizeKb}KB transcript` : null,
-    ].filter(Boolean).join(' · ');
-    const text = deduped
-      ? translate('Recording "{name}" already transcribed (reused from earlier upload). You can ask me about it now.')
-          .replace('{name}', originalName)
-      : translate('Recording "{name}" transcription complete{detail}. You can ask me about it now.')
-          .replace('{name}', originalName)
-          .replace('{detail}', detail ? ` (${detail})` : '');
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `msg_system_${fileId}_${Date.now()}`,
-        role: 'system',
-        timestamp: new Date().toISOString(),
-        blocks: [{ type: 'text', content: text }],
-      },
-    ]);
-  };
-
   // Shared SSE chat helper. Manages abort, loading state, streaming UI, and
   // assistant-message commit. Callers are responsible for adding any user
   // bubble to `messages` before calling — this function never touches the user
@@ -252,27 +217,114 @@ export default function AskOla() {
     }
   };
 
-  const handleSend = async (messageContent) => {
-    const text = messageContent.text;
-    const fileIds = Array.isArray(messageContent.attachments) ? messageContent.attachments : [];
-
-    const userMessage = {
-      id: `msg_user_${Date.now()}`,
-      role: 'user',
-      timestamp: new Date().toISOString(),
-      blocks: [{ type: 'text', content: text }],
-    };
-    setMessages((prev) => [...prev, userMessage]);
-
-    const body = { message: text };
-    if (fileIds.length > 0) body.fileIds = fileIds;
-    await _doChat(body);
+  // Poll /api/job/read/:id until the transcription job reaches a terminal state.
+  // Resolves on 'done', throws on 'failed' or 10-min timeout.
+  const _pollUntilDone = async (jobId, signal) => {
+    const startTs = Date.now();
+    while (!signal.aborted) {
+      if (Date.now() - startTs > 10 * 60 * 1000) {
+        throw new Error(translate('Transcription timed out (10 min). Try a shorter recording.'));
+      }
+      let json;
+      try {
+        const resp = await fetch(`/api/job/read/${jobId}`, { credentials: 'include' });
+        json = await resp.json();
+        if (!resp.ok || !json.success) {
+          await new Promise((r) => setTimeout(r, 3000));
+          continue;
+        }
+      } catch {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      const { status, error } = json.result ?? {};
+      if (status === 'done') return;
+      if (status === 'failed') throw new Error(error || translate('Transcription failed'));
+      await new Promise((r) => setTimeout(r, 3000));
+    }
   };
 
-  // Silent auto-trigger fired when a file finishes transcription and Ola is
-  // idle. No user bubble — SOUL.md recognises '[auto-analyze]' and gives the
-  // sugar without surfacing the marker to the salesperson (issue #387).
-  const handleAutoAnalyze = (fileId) => _doChat({ message: '[auto-analyze]', fileIds: [fileId] });
+  // Handles text-only, text+file, and file-only (auto-analyze) sends.
+  // Upload + transcription happen here, after the user clicks Send — never at attach time.
+  const handleSend = async ({ text, file }) => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    setLoading(true);
+    setStreamingText('');
+
+    try {
+      let fileId = null;
+
+      if (file) {
+        setLiveLabel(translate('Uploading file...'));
+        const formData = new FormData();
+        formData.append('file', file);
+        const uploadResp = await fetch('/api/file/create', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+          signal: ac.signal,
+        });
+        if (ac.signal.aborted) return;
+        const uploadJson = await uploadResp.json();
+        if (!uploadResp.ok || !uploadJson.success) {
+          notification.error({
+            message: translate('File upload failed'),
+            description: uploadJson?.message || `HTTP ${uploadResp.status}`,
+          });
+          return;
+        }
+        const result = uploadJson.result;
+        fileId = result._id;
+        // Dedup hit: transcription already done. Fresh upload: poll until done.
+        if (!result.deduped && result.transcriptionJobId) {
+          setLiveLabel(translate('Transcribing...'));
+          await _pollUntilDone(result.transcriptionJobId, ac.signal);
+          if (ac.signal.aborted) return;
+        }
+      }
+
+      // Add user bubble only when the salesperson typed a message.
+      // File-only send (auto-analyze) produces no user bubble by design.
+      if (text) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_user_${Date.now()}`,
+            role: 'user',
+            timestamp: new Date().toISOString(),
+            blocks: [{ type: 'text', content: text }],
+          },
+        ]);
+      }
+
+      const body = text
+        ? { message: text, ...(fileId ? { fileIds: [fileId] } : {}) }
+        : { message: '[auto-analyze]', fileIds: [fileId] };
+
+      // _doChat aborts ac (upload/transcription already done) and creates its
+      // own AbortController for the SSE stream, taking over abortRef.current.
+      await _doChat(body);
+
+    } catch (err) {
+      if (err.name === 'AbortError' || ac.signal.aborted) return;
+      notification.error({
+        message: translate('Cannot connect to Ola'),
+        description: err.message || translate('Please verify backend and NanoBot are running'),
+      });
+    } finally {
+      // Clean up only if _doChat was never reached — it replaces abortRef.current
+      // with its own controller and handles its own finally cleanup.
+      if (abortRef.current === ac) {
+        abortRef.current = null;
+        setLoading(false);
+        setLiveLabel(null);
+        setStreamingText('');
+      }
+    }
+  };
 
   const isEmpty = messages.length === 0;
 
@@ -297,7 +349,6 @@ export default function AskOla() {
           <div className="askola-chat-input-wrapper">
             <ChatInput
               onSend={handleSend}
-              onTranscriptionComplete={handleTranscriptionComplete}
               disabled={loading}
             />
           </div>
@@ -326,7 +377,6 @@ export default function AskOla() {
           <div className="askola-chat-input-wrapper">
             <ChatInput
               onSend={handleSend}
-              onTranscriptionComplete={handleTranscriptionComplete}
               disabled={loading}
             />
           </div>
