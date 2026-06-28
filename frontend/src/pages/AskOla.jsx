@@ -109,9 +109,17 @@ export default function AskOla() {
   };
 
   // Fired by ChatInput when an attached file finishes transcription
-  // (or hits dedup — already-transcribed). Drops a system message into the
-  // chat panel so the user sees confirmation before sending their question.
+  // (or hits dedup — already-transcribed). If Ola is idle, silently
+  // auto-triggers agent analysis (no user bubble). If busy, falls back to
+  // a system notification so the user knows to ask again when Ola is free.
   const handleTranscriptionComplete = ({ fileId, originalName, durationMs, sidecarBytes, deduped }) => {
+    if (!loading) {
+      // Auto-trigger: agent receives [auto-analyze] + fileId with status="done"
+      // and replies with the sugar. No user bubble shown (issue #387).
+      handleAutoAnalyze(fileId);
+      return;
+    }
+    // Fallback: Ola is busy — show notification so user knows transcript is ready.
     const seconds = durationMs ? Math.round(durationMs / 1000) : null;
     const sizeKb = sidecarBytes ? (sidecarBytes / 1024).toFixed(1) : null;
     const detail = [
@@ -255,6 +263,102 @@ export default function AskOla() {
     }
   };
 
+  // Silent auto-trigger fired when a file finishes transcription and Ola is
+  // idle. Behaves like handleSend but emits no user message bubble — the agent
+  // responds as if it proactively noticed the transcript was ready.
+  // SOUL.md recognises '[auto-analyze]' and gives the sugar without surfacing
+  // the marker to the salesperson.
+  const handleAutoAnalyze = async (fileId) => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    setLoading(true);
+    setLiveLabel(translate('Ola is thinking...'));
+    setStreamingText('');
+
+    try {
+      const body = { message: '[auto-analyze]', fileIds: [fileId] };
+      if (activeSessionId) body.sessionId = activeSessionId;
+
+      const resp = await fetch('/api/ola/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+        signal: ac.signal,
+      });
+
+      if (!resp.ok) {
+        let errMsg = `HTTP ${resp.status}`;
+        try {
+          const j = await resp.json();
+          if (j && j.message) errMsg = j.message;
+        } catch { /* keep default */ }
+        notification.error({ message: translate('Ola response failed'), description: errMsg });
+        return;
+      }
+
+      let finalSessionId = null;
+      let finalBlocks = null;
+      let errored = false;
+
+      await consumeSSEStream(resp, {
+        thinking_step: (data) => {
+          if (data && data.label) setLiveLabel(data.label);
+        },
+        text_token: (data) => {
+          if (!data || typeof data.delta !== 'string') return;
+          setLiveLabel(null);
+          setStreamingText((prev) => prev + data.delta);
+        },
+        done: (data) => {
+          if (!data) return;
+          finalSessionId = data.sessionId || null;
+          finalBlocks = Array.isArray(data.blocks) ? data.blocks : null;
+        },
+        error: (data) => {
+          errored = true;
+          notification.error({
+            message: translate('Ola response failed'),
+            description: (data && data.message) || translate('Unknown error'),
+          });
+        },
+      }, ac.signal);
+
+      if (ac.signal.aborted) return;
+
+      if (!errored && finalBlocks) {
+        const assistantMessage = {
+          id: `msg_assistant_${Date.now()}`,
+          role: 'assistant',
+          timestamp: new Date().toISOString(),
+          blocks: finalBlocks,
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        if (!activeSessionId && finalSessionId) {
+          skipNextLoadRef.current = true;
+          chatSession.setActive(finalSessionId);
+        }
+        refreshSessionList();
+      }
+    } catch (err) {
+      if (err.name === 'AbortError' || ac.signal.aborted) return;
+      notification.error({
+        message: translate('Cannot connect to Ola'),
+        description: err.message || translate('Please verify backend and NanoBot are running'),
+      });
+    } finally {
+      if (abortRef.current === ac) {
+        abortRef.current = null;
+        setLoading(false);
+        setLiveLabel(null);
+        setStreamingText('');
+      }
+    }
+  };
+
   const isEmpty = messages.length === 0;
 
   return (
@@ -262,7 +366,18 @@ export default function AskOla() {
       {isEmpty ? (
         <div className="askola-chat-welcome">
           <div className="askola-chat-center">
-            <h1 className="askola-chat-greeting">{translate('What can I do for you?')}</h1>
+            {loading && (liveLabel || streamingText) ? (
+              // Auto-analyze fired on an empty chat — show progress in place
+              // of the greeting so the user isn't staring at a frozen screen.
+              <div className="askola-message askola-message--assistant">
+                <div className="askola-message-blocks">
+                  {liveLabel && <ThinkingPanel mode="live" currentLabel={liveLabel} />}
+                  {streamingText && <TextBlock content={streamingText} />}
+                </div>
+              </div>
+            ) : (
+              <h1 className="askola-chat-greeting">{translate('What can I do for you?')}</h1>
+            )}
           </div>
           <div className="askola-chat-input-wrapper">
             <ChatInput
