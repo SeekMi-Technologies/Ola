@@ -218,24 +218,21 @@ export default function AskOla() {
   };
 
   // Poll /api/job/read/:id until the transcription job reaches a terminal state.
-  // Resolves on 'done', throws on 'failed' or 10-min timeout.
+  // Resolves on 'done', throws on 'failed', auth error, or 10-min timeout.
+  // Uses request.read so JWT-expiry redirects and error notifications are handled
+  // by the shared axios layer — no silent swallowing of non-transient failures.
   const _pollUntilDone = async (jobId, signal) => {
     const startTs = Date.now();
     while (!signal.aborted) {
       if (Date.now() - startTs > 10 * 60 * 1000) {
         throw new Error(translate('Transcription timed out (10 min). Try a shorter recording.'));
       }
-      let json;
-      try {
-        const resp = await fetch(`/api/job/read/${jobId}`, { credentials: 'include' });
-        json = await resp.json();
-        if (!resp.ok || !json.success) {
-          await new Promise((r) => setTimeout(r, 3000));
-          continue;
-        }
-      } catch {
-        await new Promise((r) => setTimeout(r, 3000));
-        continue;
+      const json = await request.read({ entity: 'job', id: jobId });
+      if (signal.aborted) return;
+      if (!json?.success) {
+        // request.read already showed an error notification via errorHandler.
+        // Stop looping — a non-success response is not a transient blip.
+        throw new Error(json?.message || translate('Transcription status check failed'));
       }
       const { status, error } = json.result ?? {};
       if (status === 'done') return;
@@ -261,23 +258,21 @@ export default function AskOla() {
         setLiveLabel(translate('Uploading file...'));
         const formData = new FormData();
         formData.append('file', file);
-        const uploadResp = await fetch('/api/file/create', {
-          method: 'POST',
-          credentials: 'include',
-          body: formData,
-          signal: ac.signal,
-        });
+        const uploadJson = await request.createAndUpload({ entity: 'file', jsonData: formData });
         if (ac.signal.aborted) return;
-        const uploadJson = await uploadResp.json();
-        if (!uploadResp.ok || !uploadJson.success) {
-          notification.error({
-            message: translate('File upload failed'),
-            description: uploadJson?.message || `HTTP ${uploadResp.status}`,
-          });
+        if (!uploadJson?.success) {
+          // request.createAndUpload already showed error notification via errorHandler.
           return;
         }
         const result = uploadJson.result;
         fileId = result._id;
+        if (!fileId) {
+          notification.error({
+            message: translate('File upload failed'),
+            description: translate('Server response missing file ID'),
+          });
+          return;
+        }
         // Dedup hit: transcription already done. Fresh upload: poll until done.
         if (!result.deduped && result.transcriptionJobId) {
           setLiveLabel(translate('Transcribing...'));
@@ -302,14 +297,14 @@ export default function AskOla() {
 
       const body = text
         ? { message: text, ...(fileId ? { fileIds: [fileId] } : {}) }
-        : { message: '[auto-analyze]', fileIds: [fileId] };
+        : { message: '[auto-analyze]', ...(fileId ? { fileIds: [fileId] } : {}) };
 
       // _doChat aborts ac (upload/transcription already done) and creates its
       // own AbortController for the SSE stream, taking over abortRef.current.
       await _doChat(body);
 
     } catch (err) {
-      if (err.name === 'AbortError' || ac.signal.aborted) return;
+      if (err.name === 'AbortError') return;
       notification.error({
         message: translate('Cannot connect to Ola'),
         description: err.message || translate('Please verify backend and NanoBot are running'),
