@@ -53,6 +53,11 @@ export default function ChatInput({ onSend, onTranscriptionComplete, disabled = 
   const fileInputRef = useRef(null);
   const pollTimerRef = useRef(null);
   const completedFileIdsRef = useRef(new Set());
+  // Always holds the latest onTranscriptionComplete prop so the setInterval
+  // closure (captured at startPolling time) never reads a stale version.
+  // Pattern: https://react.dev/learn/separating-events-from-effects#reading-latest-props-and-state-with-effect-events
+  const onTranscriptionCompleteRef = useRef(onTranscriptionComplete);
+  useEffect(() => { onTranscriptionCompleteRef.current = onTranscriptionComplete; });
 
   // ---- Polling ---------------------------------------------------------
 
@@ -104,11 +109,11 @@ export default function ChatInput({ onSend, onTranscriptionComplete, disabled = 
               : prev
           );
           if (
-            onTranscriptionComplete &&
+            onTranscriptionCompleteRef.current &&
             !completedFileIdsRef.current.has(fileMeta._id)
           ) {
             completedFileIdsRef.current.add(fileMeta._id);
-            onTranscriptionComplete({
+            onTranscriptionCompleteRef.current({
               fileId: fileMeta._id,
               originalName: fileMeta.originalName,
               durationMs: job.result?.durationMs ?? null,
@@ -208,9 +213,9 @@ export default function ChatInput({ onSend, onTranscriptionComplete, disabled = 
       if (result.deduped) {
         // Dedup hit → File + Job already exist + transcription already done
         setPendingFile({ ...baseMeta, state: 'ready' });
-        if (onTranscriptionComplete && !completedFileIdsRef.current.has(result._id)) {
+        if (onTranscriptionCompleteRef.current && !completedFileIdsRef.current.has(result._id)) {
           completedFileIdsRef.current.add(result._id);
-          onTranscriptionComplete({
+          onTranscriptionCompleteRef.current({
             fileId: result._id,
             originalName: result.originalName,
             durationMs: null,

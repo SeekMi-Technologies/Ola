@@ -143,45 +143,35 @@ export default function AskOla() {
     ]);
   };
 
-  const handleSend = async (messageContent) => {
-    const text = messageContent.text;
-    const fileIds = Array.isArray(messageContent.attachments) ? messageContent.attachments : [];
-
-    // Cancel any previous in-flight stream defensively (e.g. user spam-clicks
-    // send before the previous turn finishes).
+  // Shared SSE chat helper. Manages abort, loading state, streaming UI, and
+  // assistant-message commit. Callers are responsible for adding any user
+  // bubble to `messages` before calling — this function never touches the user
+  // side of the conversation.
+  const _doChat = async (body) => {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
 
-    const userMessage = {
-      id: `msg_user_${Date.now()}`,
-      role: 'user',
-      timestamp: new Date().toISOString(),
-      blocks: [{ type: 'text', content: text }],
-    };
-    setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
-    setLiveLabel(translate('Ola is thinking...'));  // STAGE_LABELS.__init__ (kept in sync with backend)
+    setLiveLabel(translate('Ola is thinking...'));
     setStreamingText('');
 
-    try {
-      const body = { message: text };
-      if (activeSessionId) body.sessionId = activeSessionId;
-      if (fileIds.length > 0) body.fileIds = fileIds;
+    const reqBody = { ...body };
+    if (activeSessionId) reqBody.sessionId = activeSessionId;
 
+    try {
       // EventSource doesn't support POST bodies, so we use fetch + manual SSE
       // parsing. Same approach the OpenAI / Anthropic / Google JS SDKs use.
       const resp = await fetch('/api/ola/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(body),
+        body: JSON.stringify(reqBody),
         signal: ac.signal,
       });
 
       if (!resp.ok) {
         // Non-SSE failure (validation 400, auth 401, session-not-found 404).
-        // Backend returned a JSON error envelope.
         let errMsg = `HTTP ${resp.status}`;
         try {
           const j = await resp.json();
@@ -221,8 +211,7 @@ export default function AskOla() {
       }, ac.signal);
 
       // If the user cancelled (New Chat / fresh send) while we were streaming,
-      // don't commit a stale assistant message back into state — that would
-      // visibly snap the user away from their fresh chat.
+      // don't commit a stale assistant message back into state.
       if (ac.signal.aborted) return;
 
       // Commit final assistant message from `done` payload (which has
@@ -252,8 +241,8 @@ export default function AskOla() {
         description: err.message || translate('Please verify backend and NanoBot are running'),
       });
     } finally {
-      // Only clear if this is still the active stream — a newer handleSend may
-      // have already replaced abortRef.current and set fresh loading state.
+      // Only clear if this is still the active stream — a newer call may have
+      // already replaced abortRef.current and set fresh loading state.
       if (abortRef.current === ac) {
         abortRef.current = null;
         setLoading(false);
@@ -261,103 +250,29 @@ export default function AskOla() {
         setStreamingText('');
       }
     }
+  };
+
+  const handleSend = async (messageContent) => {
+    const text = messageContent.text;
+    const fileIds = Array.isArray(messageContent.attachments) ? messageContent.attachments : [];
+
+    const userMessage = {
+      id: `msg_user_${Date.now()}`,
+      role: 'user',
+      timestamp: new Date().toISOString(),
+      blocks: [{ type: 'text', content: text }],
+    };
+    setMessages((prev) => [...prev, userMessage]);
+
+    const body = { message: text };
+    if (fileIds.length > 0) body.fileIds = fileIds;
+    await _doChat(body);
   };
 
   // Silent auto-trigger fired when a file finishes transcription and Ola is
-  // idle. Behaves like handleSend but emits no user message bubble — the agent
-  // responds as if it proactively noticed the transcript was ready.
-  // SOUL.md recognises '[auto-analyze]' and gives the sugar without surfacing
-  // the marker to the salesperson.
-  const handleAutoAnalyze = async (fileId) => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-
-    setLoading(true);
-    setLiveLabel(translate('Ola is thinking...'));
-    setStreamingText('');
-
-    try {
-      const body = { message: '[auto-analyze]', fileIds: [fileId] };
-      if (activeSessionId) body.sessionId = activeSessionId;
-
-      const resp = await fetch('/api/ola/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(body),
-        signal: ac.signal,
-      });
-
-      if (!resp.ok) {
-        let errMsg = `HTTP ${resp.status}`;
-        try {
-          const j = await resp.json();
-          if (j && j.message) errMsg = j.message;
-        } catch { /* keep default */ }
-        notification.error({ message: translate('Ola response failed'), description: errMsg });
-        return;
-      }
-
-      let finalSessionId = null;
-      let finalBlocks = null;
-      let errored = false;
-
-      await consumeSSEStream(resp, {
-        thinking_step: (data) => {
-          if (data && data.label) setLiveLabel(data.label);
-        },
-        text_token: (data) => {
-          if (!data || typeof data.delta !== 'string') return;
-          setLiveLabel(null);
-          setStreamingText((prev) => prev + data.delta);
-        },
-        done: (data) => {
-          if (!data) return;
-          finalSessionId = data.sessionId || null;
-          finalBlocks = Array.isArray(data.blocks) ? data.blocks : null;
-        },
-        error: (data) => {
-          errored = true;
-          notification.error({
-            message: translate('Ola response failed'),
-            description: (data && data.message) || translate('Unknown error'),
-          });
-        },
-      }, ac.signal);
-
-      if (ac.signal.aborted) return;
-
-      if (!errored && finalBlocks) {
-        const assistantMessage = {
-          id: `msg_assistant_${Date.now()}`,
-          role: 'assistant',
-          timestamp: new Date().toISOString(),
-          blocks: finalBlocks,
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-
-        if (!activeSessionId && finalSessionId) {
-          skipNextLoadRef.current = true;
-          chatSession.setActive(finalSessionId);
-        }
-        refreshSessionList();
-      }
-    } catch (err) {
-      if (err.name === 'AbortError' || ac.signal.aborted) return;
-      notification.error({
-        message: translate('Cannot connect to Ola'),
-        description: err.message || translate('Please verify backend and NanoBot are running'),
-      });
-    } finally {
-      if (abortRef.current === ac) {
-        abortRef.current = null;
-        setLoading(false);
-        setLiveLabel(null);
-        setStreamingText('');
-      }
-    }
-  };
+  // idle. No user bubble — SOUL.md recognises '[auto-analyze]' and gives the
+  // sugar without surfacing the marker to the salesperson (issue #387).
+  const handleAutoAnalyze = (fileId) => _doChat({ message: '[auto-analyze]', fileIds: [fileId] });
 
   const isEmpty = messages.length === 0;
 
