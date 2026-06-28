@@ -221,22 +221,35 @@ export default function AskOla() {
   // Resolves on 'done', throws on 'failed', auth error, or 10-min timeout.
   // Uses request.read so JWT-expiry redirects and error notifications are handled
   // by the shared axios layer — no silent swallowing of non-transient failures.
+  //
+  // Every throw here sets err.alreadyNotified = true so handleSend's catch
+  // skips the generic "Cannot connect to Ola" second notification.
   const _pollUntilDone = async (jobId, signal) => {
+    const tagged = (msg) => {
+      const err = new Error(msg);
+      err.alreadyNotified = true;
+      return err;
+    };
     const startTs = Date.now();
     while (!signal.aborted) {
       if (Date.now() - startTs > 10 * 60 * 1000) {
-        throw new Error(translate('Transcription timed out (10 min). Try a shorter recording.'));
+        const msg = translate('Transcription timed out (10 min). Try a shorter recording.');
+        notification.error({ message: translate('Transcription timed out'), description: msg });
+        throw tagged(msg);
       }
       const json = await request.read({ entity: 'job', id: jobId });
       if (signal.aborted) return;
       if (!json?.success) {
-        // request.read already showed an error notification via errorHandler.
-        // Stop looping — a non-success response is not a transient blip.
-        throw new Error(json?.message || translate('Transcription status check failed'));
+        // request.read already showed error notification via errorHandler.
+        throw tagged(json?.message || translate('Transcription status check failed'));
       }
       const { status, error } = json.result ?? {};
       if (status === 'done') return;
-      if (status === 'failed') throw new Error(error || translate('Transcription failed'));
+      if (status === 'failed') {
+        const msg = error || translate('Transcription failed');
+        notification.error({ message: translate('Transcription failed'), description: msg });
+        throw tagged(msg);
+      }
       await new Promise((r) => setTimeout(r, 3000));
     }
   };
@@ -304,7 +317,7 @@ export default function AskOla() {
       await _doChat(body);
 
     } catch (err) {
-      if (err.name === 'AbortError') return;
+      if (err.name === 'AbortError' || err.alreadyNotified) return;
       notification.error({
         message: translate('Cannot connect to Ola'),
         description: err.message || translate('Please verify backend and NanoBot are running'),
