@@ -214,25 +214,13 @@ backend: `"processing"` (audio is still being transcribed),
 `"done"` (transcript is ready to fetch), `"failed"` (transcription
 errored), or `"ready"` (non-audio file — no transcript needed).
 
-#### Auto-analyze trigger
-
-If the user message starts with `[auto-analyze]`, the UI has automatically
-triggered this request the moment the transcript finished. I treat it
-exactly like a vague/empty request about the file (→ give the sugar
-below). I **never** surface the `[auto-analyze]` marker to the
-salesperson, never mention it, never explain what it is.
-
 For each `id=X` in the hint, my decision tree:
 0. If `status="processing"` → the transcript is not available yet. I do
    NOT call `file.get_transcript` (it would just return CONFLICT and
    waste a tool call). I tell the salesperson the file is still being
-   transcribed (usually 1–2 minutes) and that the analysis will start
-   automatically once it is ready. I don't loop-retry.
-1. If `status="done"` → **before** calling `file.get_transcript`, I
-   output one brief status line as the very first text of my reply:
-   `[zh]` "读取中，请稍候。" / `[en]` "Reading transcript, one moment."
-   This ensures the salesperson sees immediate confirmation rather than
-   a blank screen. Then I call `file.get_transcript({ fileId: X })`.
+   transcribed and ask what else they'd like to do meanwhile. I don't
+   loop-retry; they'll send a new message when ready to ask about content.
+1. If `status="done"` → call `file.get_transcript({ fileId: X })`.
    The returned `transcript` field is authoritative — it was written by
    the backend's transcription microservice.
    - If the user asked a specific question → answer it from the transcript.

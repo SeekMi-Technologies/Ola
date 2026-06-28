@@ -109,17 +109,9 @@ export default function AskOla() {
   };
 
   // Fired by ChatInput when an attached file finishes transcription
-  // (or hits dedup — already-transcribed). If Ola is idle, silently
-  // auto-triggers agent analysis (no user bubble). If busy, falls back to
-  // a system notification so the user knows to ask again when Ola is free.
+  // (or hits dedup — already-transcribed). Drops a system message into the
+  // chat panel so the user sees confirmation before sending their question.
   const handleTranscriptionComplete = ({ fileId, originalName, durationMs, sidecarBytes, deduped }) => {
-    if (!loading) {
-      // Auto-trigger: agent receives [auto-analyze] + fileId with status="done"
-      // and replies with the sugar. No user bubble shown (issue #387).
-      handleAutoAnalyze(fileId);
-      return;
-    }
-    // Fallback: Ola is busy — show notification so user knows transcript is ready.
     const seconds = durationMs ? Math.round(durationMs / 1000) : null;
     const sizeKb = sidecarBytes ? (sidecarBytes / 1024).toFixed(1) : null;
     const detail = [
@@ -143,35 +135,45 @@ export default function AskOla() {
     ]);
   };
 
-  // Shared SSE chat helper. Manages abort, loading state, streaming UI, and
-  // assistant-message commit. Callers are responsible for adding any user
-  // bubble to `messages` before calling — this function never touches the user
-  // side of the conversation.
-  const _doChat = async (body) => {
+  const handleSend = async (messageContent) => {
+    const text = messageContent.text;
+    const fileIds = Array.isArray(messageContent.attachments) ? messageContent.attachments : [];
+
+    // Cancel any previous in-flight stream defensively (e.g. user spam-clicks
+    // send before the previous turn finishes).
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
 
+    const userMessage = {
+      id: `msg_user_${Date.now()}`,
+      role: 'user',
+      timestamp: new Date().toISOString(),
+      blocks: [{ type: 'text', content: text }],
+    };
+    setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
-    setLiveLabel(translate('Ola is thinking...'));
+    setLiveLabel(translate('Ola is thinking...'));  // STAGE_LABELS.__init__ (kept in sync with backend)
     setStreamingText('');
 
-    const reqBody = { ...body };
-    if (activeSessionId) reqBody.sessionId = activeSessionId;
-
     try {
+      const body = { message: text };
+      if (activeSessionId) body.sessionId = activeSessionId;
+      if (fileIds.length > 0) body.fileIds = fileIds;
+
       // EventSource doesn't support POST bodies, so we use fetch + manual SSE
       // parsing. Same approach the OpenAI / Anthropic / Google JS SDKs use.
       const resp = await fetch('/api/ola/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(reqBody),
+        body: JSON.stringify(body),
         signal: ac.signal,
       });
 
       if (!resp.ok) {
         // Non-SSE failure (validation 400, auth 401, session-not-found 404).
+        // Backend returned a JSON error envelope.
         let errMsg = `HTTP ${resp.status}`;
         try {
           const j = await resp.json();
@@ -211,7 +213,8 @@ export default function AskOla() {
       }, ac.signal);
 
       // If the user cancelled (New Chat / fresh send) while we were streaming,
-      // don't commit a stale assistant message back into state.
+      // don't commit a stale assistant message back into state — that would
+      // visibly snap the user away from their fresh chat.
       if (ac.signal.aborted) return;
 
       // Commit final assistant message from `done` payload (which has
@@ -241,8 +244,8 @@ export default function AskOla() {
         description: err.message || translate('Please verify backend and NanoBot are running'),
       });
     } finally {
-      // Only clear if this is still the active stream — a newer call may have
-      // already replaced abortRef.current and set fresh loading state.
+      // Only clear if this is still the active stream — a newer handleSend may
+      // have already replaced abortRef.current and set fresh loading state.
       if (abortRef.current === ac) {
         abortRef.current = null;
         setLoading(false);
@@ -252,28 +255,6 @@ export default function AskOla() {
     }
   };
 
-  const handleSend = async (messageContent) => {
-    const text = messageContent.text;
-    const fileIds = Array.isArray(messageContent.attachments) ? messageContent.attachments : [];
-
-    const userMessage = {
-      id: `msg_user_${Date.now()}`,
-      role: 'user',
-      timestamp: new Date().toISOString(),
-      blocks: [{ type: 'text', content: text }],
-    };
-    setMessages((prev) => [...prev, userMessage]);
-
-    const body = { message: text };
-    if (fileIds.length > 0) body.fileIds = fileIds;
-    await _doChat(body);
-  };
-
-  // Silent auto-trigger fired when a file finishes transcription and Ola is
-  // idle. No user bubble — SOUL.md recognises '[auto-analyze]' and gives the
-  // sugar without surfacing the marker to the salesperson (issue #387).
-  const handleAutoAnalyze = (fileId) => _doChat({ message: '[auto-analyze]', fileIds: [fileId] });
-
   const isEmpty = messages.length === 0;
 
   return (
@@ -281,18 +262,7 @@ export default function AskOla() {
       {isEmpty ? (
         <div className="askola-chat-welcome">
           <div className="askola-chat-center">
-            {loading && (liveLabel || streamingText) ? (
-              // Auto-analyze fired on an empty chat — show progress in place
-              // of the greeting so the user isn't staring at a frozen screen.
-              <div className="askola-message askola-message--assistant">
-                <div className="askola-message-blocks">
-                  {liveLabel && <ThinkingPanel mode="live" currentLabel={liveLabel} />}
-                  {streamingText && <TextBlock content={streamingText} />}
-                </div>
-              </div>
-            ) : (
-              <h1 className="askola-chat-greeting">{translate('What can I do for you?')}</h1>
-            )}
+            <h1 className="askola-chat-greeting">{translate('What can I do for you?')}</h1>
           </div>
           <div className="askola-chat-input-wrapper">
             <ChatInput

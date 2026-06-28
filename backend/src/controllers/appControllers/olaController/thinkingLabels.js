@@ -45,7 +45,6 @@ const TOOL_LABELS = {
   'file.search':                'Ola is searching your files...',
   'file.get_transcript':        'Ola is reading the transcript...',
   'file.transcription_status':  'Ola is checking transcription status...',
-  'file.transcribe':            'Ola is requesting transcription...',
 };
 
 // Tools that should NOT surface a thinking step to the end user.
