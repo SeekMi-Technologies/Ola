@@ -375,28 +375,40 @@ const chat = async (req, res) => {
     // parallel keeps the post-stream tail short and avoids any write
     // serializing on the other.
     if (streamedText.length > 0 || blocks.length > 0) {
-      ChatMessage.insertMany([
-        {
-          sessionId: session._id,
-          role: 'user',
-          content: message.trim(),
-          blocks: [{ type: 'text', content: message.trim() }],
-          createdBy: userId,
-        },
-        {
-          sessionId: session._id,
-          role: 'assistant',
-          content: streamedText,
-          blocks,
-          createdBy: userId,
-        },
-      ])
+      // [auto-analyze] is a frontend-generated silent trigger (issue #387).
+      // Do not persist it as a user ChatMessage — the conversation history
+      // should show only the assistant's proactive analysis, with no user
+      // bubble containing the internal marker.
+      const isAutoAnalyze = message.trim() === '[auto-analyze]';
+      const assistantDoc = {
+        sessionId: session._id,
+        role: 'assistant',
+        content: streamedText,
+        blocks,
+        createdBy: userId,
+      };
+      const docsToInsert = isAutoAnalyze
+        ? [assistantDoc]
+        : [
+            {
+              sessionId: session._id,
+              role: 'user',
+              content: message.trim(),
+              blocks: [{ type: 'text', content: message.trim() }],
+              createdBy: userId,
+            },
+            assistantDoc,
+          ];
+      ChatMessage.insertMany(docsToInsert)
         .then((docs) => {
           // Plumb the assistant message _id into the LLMUsage row so the
           // dashboard can deep-link cost → original message. Best-effort:
-          // if docs[1] is missing for any reason, recordUsage tolerates
-          // null messageId.
-          const assistantMsgId = docs && docs[1] && docs[1]._id;
+          // if the assistant doc is missing for any reason, recordUsage
+          // tolerates null messageId.
+          // docs[0] = assistant when auto-analyze (no user doc); docs[1] otherwise.
+          const assistantMsgId = isAutoAnalyze
+            ? docs && docs[0] && docs[0]._id
+            : docs && docs[1] && docs[1]._id;
           if (capturedUsage) {
             recordUsage({
               userId,
