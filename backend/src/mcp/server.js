@@ -283,33 +283,27 @@ async function main() {
   );
 
   // GET /internal/file/:id/transcript — read completed sidecar transcript for
-  // nanobot WhatsApp channel, so the channel can inline the text as
-  // [音频文件转写] before handing off to the agent (mirrors getTranscript logic).
+  // nanobot WhatsApp channel. Delegates to fileController.getTranscript via
+  // runController so DB/file-read logic lives in a single place and all status
+  // codes (422 failed job, 409 processing, 404 not-found) are preserved exactly.
   // Auth: service token + X-Acting-As (same as /internal/upload-audio).
   app.get('/internal/file/:id/transcript', requireAuth, async (req, res) => {
     const decision = await decideActingAdmin(req.headers['x-acting-as'], 'internal/file/transcript');
     if (!decision.ok) {
       return res.status(decision.status).json({ ok: false, code: decision.code, message: decision.message });
     }
-    const admin = decision.actingAdmin;
     try {
-      const mongoose = require('mongoose');
-      const fs = require('fs').promises;
-      const { resolveUploadPath } = require('@/utils/uploadsPath');
-      const File = mongoose.model('File');
-      const Job = mongoose.model('Job');
-
-      const file = await File.findOne({ _id: req.params.id, createdBy: admin._id, removed: false }).lean();
-      if (!file) return res.status(404).json({ ok: false, code: 'NOT_FOUND', message: 'File not found' });
-      if (!file.transcriptionJobId) return res.status(422).json({ ok: false, code: 'NO_JOB', message: 'No transcription job for this file' });
-
-      const job = await Job.findOne({ _id: file.transcriptionJobId, createdBy: admin._id }).lean();
-      if (!job) return res.status(500).json({ ok: false, code: 'INTERNAL', message: 'Job record missing' });
-      if (job.status !== 'done') return res.status(409).json({ ok: false, code: 'NOT_READY', message: `Job status: ${job.status}` });
-
-      const sidecarPath = resolveUploadPath(job.result?.sidecarPath);
-      const transcript = await fs.readFile(sidecarPath, 'utf-8');
-      return res.json({ ok: true, transcript, originalName: file.originalName });
+      const { runController } = require('@/mcp/adapters/controllerAdapter');
+      const fileController = require('@/controllers/appControllers/fileController');
+      const result = await runController(fileController.getTranscript, {
+        params: { id: req.params.id },
+        admin: decision.actingAdmin,
+      });
+      if (!result.ok) {
+        const codeToStatus = { VALIDATION: 400, PERMISSION: 403, NOT_FOUND: 404, CONFLICT: 409 };
+        return res.status(codeToStatus[result.code] || 500).json({ ok: false, code: result.code, message: result.message });
+      }
+      return res.json({ ok: true, transcript: result.data.transcript, originalName: result.data.originalName });
     } catch (err) {
       console.error('[internal/file/transcript] error:', err);
       return res.status(500).json({ ok: false, code: 'INTERNAL', message: err.message });
@@ -317,14 +311,17 @@ async function main() {
   });
 
   // GET /internal/job/:id — lightweight job-status probe for nanobot WhatsApp
-  // channel to poll transcription progress without going through the MCP tool
-  // layer. Auth: same Bearer service token as /internal/upload-audio.
-  // No X-Acting-As required — job is looked up by raw _id; service token is
-  // already trusted and scoped to the Ola backend network.
+  // channel to poll transcription progress. Requires X-Acting-As so job reads
+  // are scoped to the acting admin; prevents a service-token holder from reading
+  // any admin's job record.
   app.get('/internal/job/:id', requireAuth, async (req, res) => {
+    const decision = await decideActingAdmin(req.headers['x-acting-as'], 'internal/job');
+    if (!decision.ok) {
+      return res.status(decision.status).json({ ok: false, code: decision.code, message: decision.message });
+    }
     try {
       const Job = require('mongoose').model('Job');
-      const job = await Job.findById(req.params.id).lean();
+      const job = await Job.findOne({ _id: req.params.id, createdBy: decision.actingAdmin._id }).lean();
       if (!job) return res.status(404).json({ ok: false, code: 'NOT_FOUND', message: 'Job not found' });
       return res.json({ ok: true, status: job.status, error: job.error || null });
     } catch (err) {
