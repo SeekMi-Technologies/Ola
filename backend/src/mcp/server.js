@@ -282,6 +282,57 @@ async function main() {
     }
   );
 
+  // GET /internal/file/:id/transcript — read completed sidecar transcript for
+  // nanobot WhatsApp channel, so the channel can inline the text as
+  // [音频文件转写] before handing off to the agent (mirrors getTranscript logic).
+  // Auth: service token + X-Acting-As (same as /internal/upload-audio).
+  app.get('/internal/file/:id/transcript', requireAuth, async (req, res) => {
+    const decision = await decideActingAdmin(req.headers['x-acting-as'], 'internal/file/transcript');
+    if (!decision.ok) {
+      return res.status(decision.status).json({ ok: false, code: decision.code, message: decision.message });
+    }
+    const admin = decision.actingAdmin;
+    try {
+      const mongoose = require('mongoose');
+      const fs = require('fs').promises;
+      const { resolveUploadPath } = require('@/utils/uploadsPath');
+      const File = mongoose.model('File');
+      const Job = mongoose.model('Job');
+
+      const file = await File.findOne({ _id: req.params.id, createdBy: admin._id, removed: false }).lean();
+      if (!file) return res.status(404).json({ ok: false, code: 'NOT_FOUND', message: 'File not found' });
+      if (!file.transcriptionJobId) return res.status(422).json({ ok: false, code: 'NO_JOB', message: 'No transcription job for this file' });
+
+      const job = await Job.findOne({ _id: file.transcriptionJobId, createdBy: admin._id }).lean();
+      if (!job) return res.status(500).json({ ok: false, code: 'INTERNAL', message: 'Job record missing' });
+      if (job.status !== 'done') return res.status(409).json({ ok: false, code: 'NOT_READY', message: `Job status: ${job.status}` });
+
+      const sidecarPath = resolveUploadPath(job.result?.sidecarPath);
+      const transcript = await fs.readFile(sidecarPath, 'utf-8');
+      return res.json({ ok: true, transcript, originalName: file.originalName });
+    } catch (err) {
+      console.error('[internal/file/transcript] error:', err);
+      return res.status(500).json({ ok: false, code: 'INTERNAL', message: err.message });
+    }
+  });
+
+  // GET /internal/job/:id — lightweight job-status probe for nanobot WhatsApp
+  // channel to poll transcription progress without going through the MCP tool
+  // layer. Auth: same Bearer service token as /internal/upload-audio.
+  // No X-Acting-As required — job is looked up by raw _id; service token is
+  // already trusted and scoped to the Ola backend network.
+  app.get('/internal/job/:id', requireAuth, async (req, res) => {
+    try {
+      const Job = require('mongoose').model('Job');
+      const job = await Job.findById(req.params.id).lean();
+      if (!job) return res.status(404).json({ ok: false, code: 'NOT_FOUND', message: 'Job not found' });
+      return res.json({ ok: true, status: job.status, error: job.error || null });
+    } catch (err) {
+      console.error('[internal/job] error:', err);
+      return res.status(500).json({ ok: false, code: 'INTERNAL', message: err.message });
+    }
+  });
+
   // 全局 Express error handler —— 兜底任何未捕获的同步/异步异常
   // 必须放在所有路由之后，签名 4 个参数 Express 才识别为 error handler
   // eslint-disable-next-line no-unused-vars

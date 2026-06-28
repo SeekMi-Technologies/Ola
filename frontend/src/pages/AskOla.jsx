@@ -333,7 +333,7 @@ export default function AskOla() {
     }
   };
 
-  const isEmpty = messages.length === 0;
+  const isEmpty = messages.length === 0 && !loading;
 
   return (
     <div className={`askola-chat-page ${isEmpty ? 'askola-chat-page--empty' : 'askola-chat-page--active'}`}>
