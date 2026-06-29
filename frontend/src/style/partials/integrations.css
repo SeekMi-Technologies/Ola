@@ -110,4 +110,70 @@
   transform: translateY(0);
   opacity: 1;
 }
-*/
+/* ===== Notion Connection Modal ===== */
+
+.notion-connect-modal .ant-modal-content {
+  border-radius: 16px !important;
+  padding: 24px 32px !important;
+}
+
+.notion-modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f1f1f;
+  font-family: 'Inter', system-ui, sans-serif;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.notion-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px 0 8px;
+}
+
+.notion-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.notion-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notion-modal-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #595959;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.notion-modal-input {
+  height: 38px;
+  border-radius: 6px;
+  border-color: #d9d9d9;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.notion-modal-select {
+  width: 100%;
+  height: 38px;
+}
+
+.notion-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.notion-modal-btn {
+  height: 38px;
+  border-radius: 6px;
+  font-weight: 500;
+  padding: 0 24px;
+}

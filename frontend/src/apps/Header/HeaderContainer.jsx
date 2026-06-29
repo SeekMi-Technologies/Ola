@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { useAppContext } from '@/context/appContext';
 import useLanguage from '@/locale/useLanguage';
 import LanguageToggle from '@/components/LanguageToggle';
+import AppBreadcrumb from '@/components/Breadcrumb';
 
 import {
   // === MVP-HIDDEN: Help / 3-dot Setting 按钮已注释掉 ===
@@ -115,9 +116,8 @@ export default function HeaderContent() {
         borderBottom: '1px solid #f0f0f0',
       }}
     >
-      <div className="header-page-title">
-        <span className="header-page-icon">{pageInfo.icon}</span>
-        <span className="header-page-label">{translate(pageInfo.label)}</span>
+      <div className="header-page-title" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <AppBreadcrumb />
       </div>
 
       <div className="header-right-actions">

@@ -108,72 +108,35 @@ export default function AskOla() {
     setMessages([]);
   };
 
-  // Fired by ChatInput when an attached file finishes transcription
-  // (or hits dedup — already-transcribed). Drops a system message into the
-  // chat panel so the user sees confirmation before sending their question.
-  const handleTranscriptionComplete = ({ fileId, originalName, durationMs, sidecarBytes, deduped }) => {
-    const seconds = durationMs ? Math.round(durationMs / 1000) : null;
-    const sizeKb = sidecarBytes ? (sidecarBytes / 1024).toFixed(1) : null;
-    const detail = [
-      seconds !== null ? `${seconds}s` : null,
-      sizeKb !== null ? `${sizeKb}KB transcript` : null,
-    ].filter(Boolean).join(' · ');
-    const text = deduped
-      ? translate('Recording "{name}" already transcribed (reused from earlier upload). You can ask me about it now.')
-          .replace('{name}', originalName)
-      : translate('Recording "{name}" transcription complete{detail}. You can ask me about it now.')
-          .replace('{name}', originalName)
-          .replace('{detail}', detail ? ` (${detail})` : '');
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `msg_system_${fileId}_${Date.now()}`,
-        role: 'system',
-        timestamp: new Date().toISOString(),
-        blocks: [{ type: 'text', content: text }],
-      },
-    ]);
-  };
-
-  const handleSend = async (messageContent) => {
-    const text = messageContent.text;
-    const fileIds = Array.isArray(messageContent.attachments) ? messageContent.attachments : [];
-
-    // Cancel any previous in-flight stream defensively (e.g. user spam-clicks
-    // send before the previous turn finishes).
+  // Shared SSE chat helper. Manages abort, loading state, streaming UI, and
+  // assistant-message commit. Callers are responsible for adding any user
+  // bubble to `messages` before calling — this function never touches the user
+  // side of the conversation.
+  const _doChat = async (body) => {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
 
-    const userMessage = {
-      id: `msg_user_${Date.now()}`,
-      role: 'user',
-      timestamp: new Date().toISOString(),
-      blocks: [{ type: 'text', content: text }],
-    };
-    setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
-    setLiveLabel(translate('Ola is thinking...'));  // STAGE_LABELS.__init__ (kept in sync with backend)
+    setLiveLabel(translate('Ola is thinking...'));
     setStreamingText('');
 
-    try {
-      const body = { message: text };
-      if (activeSessionId) body.sessionId = activeSessionId;
-      if (fileIds.length > 0) body.fileIds = fileIds;
+    const reqBody = { ...body };
+    if (activeSessionId) reqBody.sessionId = activeSessionId;
 
+    try {
       // EventSource doesn't support POST bodies, so we use fetch + manual SSE
       // parsing. Same approach the OpenAI / Anthropic / Google JS SDKs use.
       const resp = await fetch('/api/ola/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(body),
+        body: JSON.stringify(reqBody),
         signal: ac.signal,
       });
 
       if (!resp.ok) {
         // Non-SSE failure (validation 400, auth 401, session-not-found 404).
-        // Backend returned a JSON error envelope.
         let errMsg = `HTTP ${resp.status}`;
         try {
           const j = await resp.json();
@@ -213,8 +176,7 @@ export default function AskOla() {
       }, ac.signal);
 
       // If the user cancelled (New Chat / fresh send) while we were streaming,
-      // don't commit a stale assistant message back into state — that would
-      // visibly snap the user away from their fresh chat.
+      // don't commit a stale assistant message back into state.
       if (ac.signal.aborted) return;
 
       // Commit final assistant message from `done` payload (which has
@@ -244,8 +206,8 @@ export default function AskOla() {
         description: err.message || translate('Please verify backend and NanoBot are running'),
       });
     } finally {
-      // Only clear if this is still the active stream — a newer handleSend may
-      // have already replaced abortRef.current and set fresh loading state.
+      // Only clear if this is still the active stream — a newer call may have
+      // already replaced abortRef.current and set fresh loading state.
       if (abortRef.current === ac) {
         abortRef.current = null;
         setLoading(false);
@@ -255,19 +217,145 @@ export default function AskOla() {
     }
   };
 
-  const isEmpty = messages.length === 0;
+  // Poll /api/job/read/:id until the transcription job reaches a terminal state.
+  // Resolves on 'done'. Throws (with a specific notification already shown) on
+  // job failure or 10-min timeout. On request error, request.read's errorHandler
+  // has already shown a notification — this just throws to stop the loop.
+  // Caller must wrap this in its own try/catch and never re-notify on failure.
+  const _pollUntilDone = async (jobId, signal) => {
+    const startTs = Date.now();
+    while (!signal.aborted) {
+      if (Date.now() - startTs > 10 * 60 * 1000) {
+        const msg = translate('Transcription timed out (10 min). Try a shorter recording.');
+        notification.error({ message: translate('Transcription timed out'), description: msg });
+        throw new Error(msg);
+      }
+      const json = await request.read({ entity: 'job', id: jobId });
+      if (signal.aborted) return;
+      if (!json?.success) {
+        // request.read already showed error notification via errorHandler.
+        throw new Error(json?.message || translate('Transcription status check failed'));
+      }
+      const { status, error } = json.result ?? {};
+      if (status === 'done') return;
+      if (status === 'failed') {
+        const msg = error || translate('Transcription failed');
+        notification.error({ message: translate('Transcription failed'), description: msg });
+        throw new Error(msg);
+      }
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  };
+
+  // Handles text-only, text+file, and file-only (auto-analyze) sends.
+  // Upload + transcription happen here, after the user clicks Send — never at attach time.
+  const handleSend = async ({ text, file }) => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    setLoading(true);
+    setStreamingText('');
+
+    try {
+      let fileId = null;
+
+      if (file) {
+        setLiveLabel(translate('Uploading file...'));
+        const formData = new FormData();
+        formData.append('file', file);
+        const uploadJson = await request.createAndUpload({ entity: 'file', jsonData: formData });
+        if (ac.signal.aborted) return;
+        if (!uploadJson?.success) {
+          // request.createAndUpload already showed error notification via errorHandler.
+          return;
+        }
+        const result = uploadJson.result;
+        fileId = result._id;
+        if (!fileId) {
+          notification.error({
+            message: translate('File upload failed'),
+            description: translate('Server response missing file ID'),
+          });
+          return;
+        }
+        // Dedup hit: transcription already done. Fresh upload: poll until done.
+        // _pollUntilDone handles its own notifications — wrap in a dedicated
+        // catch so poll errors never reach the outer "Cannot connect to Ola" handler.
+        if (!result.deduped && result.transcriptionJobId) {
+          setLiveLabel(translate('Transcribing...'));
+          try {
+            await _pollUntilDone(result.transcriptionJobId, ac.signal);
+          } catch {
+            return;
+          }
+          if (ac.signal.aborted) return;
+        }
+      }
+
+      // Add user bubble only when the salesperson typed a message.
+      // File-only send (auto-analyze) produces no user bubble by design.
+      if (text) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_user_${Date.now()}`,
+            role: 'user',
+            timestamp: new Date().toISOString(),
+            blocks: [{ type: 'text', content: text }],
+          },
+        ]);
+      }
+
+      const body = text
+        ? { message: text, ...(fileId ? { fileIds: [fileId] } : {}) }
+        : { message: '[auto-analyze]', ...(fileId ? { fileIds: [fileId] } : {}) };
+
+      // _doChat aborts ac (upload/transcription already done) and creates its
+      // own AbortController for the SSE stream, taking over abortRef.current.
+      await _doChat(body);
+
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      notification.error({
+        message: translate('Cannot connect to Ola'),
+        description: err.message || translate('Please verify backend and NanoBot are running'),
+      });
+    } finally {
+      // Clean up only if _doChat was never reached — it replaces abortRef.current
+      // with its own controller and handles its own finally cleanup.
+      if (abortRef.current === ac) {
+        abortRef.current = null;
+        setLoading(false);
+        setLiveLabel(null);
+        setStreamingText('');
+      }
+    }
+  };
+
+  const isEmpty = messages.length === 0 && !loading;
 
   return (
     <div className={`askola-chat-page ${isEmpty ? 'askola-chat-page--empty' : 'askola-chat-page--active'}`}>
       {isEmpty ? (
         <div className="askola-chat-welcome">
           <div className="askola-chat-center">
-            <h1 className="askola-chat-greeting">{translate('What can I do for you?')}</h1>
+            {loading && (liveLabel || streamingText) ? (
+              // Auto-analyze fired on an empty chat — show progress in place
+              // of the greeting so the user isn't staring at a frozen screen.
+              <div className="askola-message askola-message--assistant">
+                <div className="askola-message-blocks">
+                  {liveLabel && <ThinkingPanel mode="live" currentLabel={liveLabel} />}
+                  {streamingText && <TextBlock content={streamingText} />}
+                </div>
+              </div>
+            ) : (
+              <h1 className="askola-chat-greeting">{translate('What can I do for you?')}</h1>
+            )}
           </div>
           <div className="askola-chat-input-wrapper">
             <ChatInput
               onSend={handleSend}
-              onTranscriptionComplete={handleTranscriptionComplete}
               disabled={loading}
             />
           </div>
@@ -296,7 +384,6 @@ export default function AskOla() {
           <div className="askola-chat-input-wrapper">
             <ChatInput
               onSend={handleSend}
-              onTranscriptionComplete={handleTranscriptionComplete}
               disabled={loading}
             />
           </div>

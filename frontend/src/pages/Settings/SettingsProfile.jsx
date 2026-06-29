@@ -127,7 +127,7 @@ export default function SettingsProfile() {
           <Select
             className="profile-time-select"
             options={[
-              { value: 'zh', label: '中文' },
+              { value: 'zh', label: '简体中文' },
               { value: 'en', label: 'English' },
             ]}
           />

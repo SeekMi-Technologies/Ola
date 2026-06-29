@@ -10,7 +10,7 @@ import { selectCurrentAdmin } from '@/redux/auth/selectors';
 import { FILE_BASE_URL } from '@/config/serverApiConfig';
 
 import useLanguage from '@/locale/useLanguage';
-import logo from '@/style/images/aola.png';
+import logo from '@/style/images/ola.svg';
 import collapsedLogo from '@/style/images/collapsed-logo.svg';
 
 import useResponsive from '@/hooks/useResponsive';
