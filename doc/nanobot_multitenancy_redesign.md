@@ -15,25 +15,25 @@
 
 坏的全在请求链路**之外**：provisioning、Dream 自进化、后台任务（cron/heartbeat）、subagent、per-admin 人设。生产现在靠 **serve-only + 禁 cron** 才安全（stopgap）。
 
-## 2. epic 拆解 — 一个 PR 干一件事
+## 2. epic 拆解 — atomic commit 攒一个完整 PR
 
-四个有序 stage，每个独立可测、独立成 PR（nanobot `ZYD_FEAT` → PR → `ola-dev`）。顺序内 #356 依赖 #354。
+每个 stage 一个 **atomic commit**（git 历史清晰、可单独 review/revert），但**不逐 stage PR**。顺序内 #356 依赖 #354。
 
-| Stage | Issue | 一句话 | 性质 | PR |
+| Stage | Issue | 一句话 | 仓库 | 依赖 |
 |---|---|---|---|---|
-| 01 | #353 | per-admin prompt 读取 + 全局回退 | 纯读、零写 | PR-1 |
-| 02 | #354 | lazy provisioning + USER.md 播种 | 写路径、幂等 | PR-2 |
-| 03 | #355 | file_state 按 admin 隔离 | 内存状态键改造 | PR-3 |
-| 04 | #356 | 存量用户 backfill 脚本 | 一次性幂等迁移 | PR-4（依赖 PR-2） |
-
-执行节奏：完成一个 stage → `/ship` 出 PR → 合并到 `ola-dev` → rebase ZYD_FEAT → 下一个 stage。PR 之间不串味。
-
-**地基之后的后续 epic**（详见 §8，依赖 #353 + #354）：人设控制面 —— 让我们在 devboard 看/改每个用户的人设，告别手改 box。
-
-| Stage | 一句话 | 仓库 | 依赖 |
-|---|---|---|---|
-| P-A | nanobot 人设控制面 API（`/internal/persona/*`） | nanobot | #353 + #354 |
+| 01 | #353 | per-admin prompt 读取 + 全局回退 | nanobot | — |
+| 02 | #354 | lazy provisioning + USER.md 播种 | nanobot | — |
+| ~~03~~ | ~~#355~~ | ~~file_state 按 admin 隔离~~ — **跳过(moot)，见 §7** | — | — |
+| 04 | #356 | 存量用户 backfill 脚本 | nanobot | #354 |
+| P-A | 人设控制面 API（`/internal/persona/*`） | nanobot | #353+#354 |
 | P-B | devboard 人设管理页 + BFF | ola_devboard | P-A |
+
+**PR 纪律（硬规则）**：commit 攒在 feature 分支（nanobot `ZYD_FEAT`）上，**整个 feature（#353→P-A）+ devboard 侧（P-B）一起本地端到端测过**之后才开 PR。
+- 合并到 `ola-dev`(nanobot) / `dev`(crm) **会触发 staging server 全量重部署** —— 绝不用半成品 epic 触发。
+- ❌ 不逐 atomic stage PR。**一个 PR = 一个完整可部署的 feature。**
+- 纯文档（crm）可独立 PR → `dev`（不部署服务），属个例。
+
+人设控制面 P-A / P-B 详见 §8。
 
 ## 3. 锁定的设计决策
 
@@ -182,8 +182,8 @@ deploy provisioner 不碰 per-admin 目录，所以两者正交。
 
 ## 7. 现状对照（#355 / #356 落点）
 
-- **#355** `nanobot/agent/tools/file_state.py`：模块级 `_state: dict[str, ReadState] = {}` 只按解析后路径字符串做 key → read-before-edit gate 和 read dedup **跨租户共享污染**。改为按 `(acting admin, resolved path)` 做 key，并给 `filesystem.py` 提供 accessor 替换裸 `_state` 访问。
-- **#356** 一次性幂等脚本 `scripts/backfill_admin_provisioning.py`：遍历 `workspace/admins/*`（跳 `_system`）对每个跑 `provision_admin`。依赖 #354。
+- **#355 — 跳过(moot)**：`file_state.py` 模块级 `_state` 按路径 key 确有跨租户污染隐患，但当前 config `mcpOnly: true` + `exec.enable: false` → filesystem/shell 工具在 `loop.py:303`（`if not mcp_only`）**根本不注册**，`file_state` 全代码库**无任何调用方**（仅 `filesystem.py` 用，而它已不注册）。即污染路径不可达，做隔离是给死代码画蛇添足。**caveat**：这是 config 开关；若将来某 agent 把 `mcp_only` 翻 false 启用 filesystem 工具，需重新做按 `(acting admin, resolved path)` keying + 给 `filesystem.py:210` 一个 accessor 替换裸 `_state.get`。
+- **#356** 一次性幂等脚本 `scripts/backfill_admin_provisioning.py`（薄 argparse 壳）+ 可测核心 `helpers.backfill_admins(workspace, dry_run)`：遍历 `workspace/admins/*`（跳 `_system`）对每个跑 `provision_admin`。依赖 #354。双 workspace → ops 对 `api-workspace` 和 `workspace` 各跑一次。
 
 ## 8. 后续 epic — 人设控制面（P-A / P-B）
 
@@ -231,3 +231,40 @@ devboard 前端 (人设管理页)
 - 那时把同样能力**下放给终端用户**（self-serve 人设）= 把 devboard 页面换皮搬进 CRM。
 
 所以 P-A 的接口现在就按"资源"语义设计，为后面铺路，不返工。
+
+## 9. WS-D — 消除双工作区（决定：只维护一份）
+
+> 2026-06-16 zyd + Binghan 对齐。决定：**回到单 workspace**（不做 config/state 分离）。docker 改动 handoff 给 Binghan；nanobot 代码侧基本零改动。
+
+### 起源（不是 Binghan 造的，是上游）
+
+双 workspace 来自上游 nanobot commit **`d99331ad`**（`dengjingren@cn.wilmar-intl.com`，2026-04-06，"add nanobot-api service with isolated workspace"）—— 给 serve 加了 `-w /root/.nanobot/api-workspace`，理由是 *"avoid session/memory conflicts with nanobot-gateway"*。Binghan 的 CD 容器化 **`a7d45649`**（2026-06-10）**继承**了这行,把它带进 Ola prod（pre-docker 的 systemd 跑法是单 workspace,所以容器化才暴露出来）。
+
+| 环境 | serve(webchat) | gateway(whatsapp/email) | 工作区 |
+|---|---|---|---|
+| 本地 start-dev | 默认 `~/.nanobot/workspace` | 默认 同上 | **一个** |
+| Docker(现状) | `-w api-workspace` | 默认 `workspace` | **两个,persona/session 分裂** |
+
+### 为什么单 workspace 安全（无需 config/state 分离、无需 flock）
+
+双 workspace 当初要躲的"并发写"其实是个半measure：`history.jsonl` 是 **per-admin、所有会话共用**,同 admin 多会话在单进程内**本来就并发 append**。回到单 workspace 只是多了 serve↔gateway 跨进程这一维。实测后果可控：
+
+- **sessions**：serve 写 `api:*`、gateway 写 `whatsapp:*/email:*` → **文件名不撞,不冲突**。
+- **history.jsonl + .cursor**：唯一跨进程共享写。最坏 = 大条目(可达 64KB > PIPE_BUF 4KB)交错出一行坏的 → 但读取 `_read_entries` **容忍坏行**(`JSONDecodeError: continue`,跳过)→ 偶尔丢一条 history,不崩、自恢复。
+- **MEMORY.md / gitstore**：仅 Dream/Consolidator 写,**Dream 关着 → 运行时不写** → cursor 抢号无影响。
+
+→ **结论:nanobot 代码零改动**(代码本来只用 `self.workspace`、读取已容错、Dream 关)。
+
+### 分工
+
+- **Docker（→ Binghan,PR message 写明）**：去掉 serve 的 `-w api-workspace`;serve + gateway 共用单 `workspace`;状态目录 + `provision-nanobot-workspaces.sh` 只播一份。
+- **迁移（→ zyd 手动,一次性例外）**：仅 gingersoft 一家需迁。把 `api-workspace/admins/<gingersoft-id>/` 的 session 文件搬进 `workspace/admins/<同 id>/`;persona 文件以哪份为准 zyd 定。不写脚本。
+- **nanobot 代码**：无。
+
+### flock / 完整跨进程锁 → 推迟到 WS-C，触发条件：
+
+① 重新开启 Dream/consolidation（cursor 完整性变重要）;② 上规模高并发。届时做完整 per-admin 跨进程锁(asyncio 锁跨不了进程,需 OS 级 flock)。
+
+### skills 共用
+
+`workspace/skills/` 全局共享(deploy provisioner 全局覆盖)—— 产品级操作手册,改一次所有公司受益、公司删不掉。per-公司定制属 SOUL,不属 skill。人设级差异(客服 vs 销售教练 用不同 skill 集)= 按入口选,属未来 persona 路由,非 per-公司。
