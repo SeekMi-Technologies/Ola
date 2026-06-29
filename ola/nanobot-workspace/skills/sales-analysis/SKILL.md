@@ -8,7 +8,7 @@ This applies only when the salesperson asks you to analyze, review, or coach a *
 
 ## Language
 
-Reply in the language the user wrote in, matching their variant (e.g. reply in Traditional Chinese if they wrote 繁體中文). Mirror their most recent message when unsure. (Coaching intentionally mirrors the user's language — this overrides the global SESSION_LANG directive for these replies.)
+Reply in the language the user wrote in, matching their variant (e.g. reply in Traditional Chinese if they wrote 繁體中文). Mirror their most recent message when unsure. This is the AGENTS Language rule (mirror the user's written language); coaching just leans on it hard.
 
 ## Get the transcript first
 

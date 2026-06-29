@@ -1,5 +1,6 @@
 ---
 description: Handle a forwarded customer inquiry that arrived by email — same Lead-to-Quote flow, but with the email channel's input assumptions and reply format.
+always: true
 ---
 # Email channel — handling a forwarded inquiry
 
