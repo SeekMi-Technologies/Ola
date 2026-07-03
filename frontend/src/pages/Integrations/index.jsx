@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { Button, Input, Switch, Row, Col, message, Modal, QRCode, Spin } from 'antd';
+import { Button, Input, Select, Switch, Row, Col, message, Modal, QRCode, Spin } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { PageHeader } from '@ant-design/pro-layout';
 import useLanguage from '@/locale/useLanguage';
 import whatsappLogo from '@/style/images/whatsapp.png';
+import notionLogo from '@/style/images/notion.png';
 import { waLogin, waStatus, waLogout } from '@/request/whatsapp';
 
 // Data lives outside the component so it is never recreated on render.
@@ -14,6 +15,11 @@ const INTEGRATIONS_DATA = [
     name: 'WhatsApp',
     popular: true,
     descriptionKey: 'integration_desc_whatsapp',
+    statusKeys: {
+      disconnected: 'whatsapp_status_disconnected',
+      qr_pending: 'whatsapp_status_connecting',
+      connected: 'whatsapp_status_connected',
+    },
     logo: (
       <img
         src={whatsappLogo}
@@ -22,22 +28,39 @@ const INTEGRATIONS_DATA = [
       />
     ),
   },
+  {
+    id: 'notion',
+    name: 'Notion',
+    popular: true,
+    descriptionKey: 'integration_desc_notion',
+    statusKeys: {
+      disconnected: 'notion_status_disconnected',
+      connecting: 'notion_status_connecting',
+      connected: 'notion_status_connected',
+    },
+    logo: (
+      <img
+        src={notionLogo}
+        alt="Notion"
+        style={{ width: '22px', height: '22px', objectFit: 'contain' }}
+      />
+    ),
+  },
 ];
 
 // Observed bridge status → i18n label key + accent color.
-const STATUS_LABEL_KEY = {
-  disconnected: 'whatsapp_status_disconnected',
-  qr_pending: 'whatsapp_status_connecting',
-  connected: 'whatsapp_status_connected',
+const labelKeyFor = (item, s) => item.statusKeys[s] || item.statusKeys.disconnected;
+
+const colorFor = (s) => {
+  const colors = {
+    disconnected: '#8c8c8c',
+    qr_pending: '#1677ff',
+    connecting: '#1677ff',
+    connected: '#52c41a',
+  };
+  return colors[s] || colors.disconnected;
 };
-const STATUS_COLOR = {
-  disconnected: '#8c8c8c',
-  qr_pending: '#1677ff',
-  connected: '#52c41a',
-};
-// logged_out / unknown collapse to "not connected" in the UI — no separate display.
-const labelKeyFor = (s) => STATUS_LABEL_KEY[s] || STATUS_LABEL_KEY.disconnected;
-const colorFor = (s) => STATUS_COLOR[s] || STATUS_COLOR.disconnected;
+
 const POLL_MS = 2500;
 
 export default function IntegrationsPage() {
@@ -49,10 +72,18 @@ export default function IntegrationsPage() {
   const showConnectedOnly = false;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Per-integration status map — keyed by integration id.
+  const [statuses, setStatuses] = useState({ whatsapp: 'disconnected', notion: 'disconnected' });
+  const setStatus = (id, value) => setStatuses((prev) => ({ ...prev, [id]: value }));
+
   // WhatsApp live state, pulled from the bridge via the CRM proxy.
-  const [waStatusValue, setWaStatusValue] = useState('disconnected');
   const [waQr, setWaQr] = useState(null);
   const pollRef = useRef(null);
+
+  // Notion mock state.
+  const [isNotionModalOpen, setIsNotionModalOpen] = useState(false);
+  const [notionNickname, setNotionNickname] = useState('');
+  const [notionAccess, setNotionAccess] = useState('team');
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -62,8 +93,8 @@ export default function IntegrationsPage() {
   };
 
   const isItemConnected = useCallback(
-    (item) => item.id === 'whatsapp' && waStatusValue === 'connected',
-    [waStatusValue]
+    (item) => statuses[item.id] === 'connected',
+    [statuses]
   );
 
   // Map an error to the right localized toast (503 = gateway down).
@@ -74,7 +105,7 @@ export default function IntegrationsPage() {
 
   const applyStatus = (result) => {
     const next = result?.status || 'disconnected';
-    setWaStatusValue(next);
+    setStatus('whatsapp', next);
     setWaQr(result?.qr || null);
     if (next === 'connected') {
       stopPolling();
@@ -90,7 +121,7 @@ export default function IntegrationsPage() {
     } catch (err) {
       stopPolling();
       setIsModalOpen(false);
-      setWaStatusValue('disconnected');
+      setStatus('whatsapp', 'disconnected');
       toastError(err);
     }
   };
@@ -106,11 +137,11 @@ export default function IntegrationsPage() {
     setIsModalOpen(true);
     try {
       const res = await waLogin();
-      setWaStatusValue(res.result?.status || 'qr_pending');
+      setStatus('whatsapp', res.result?.status || 'qr_pending');
       startPolling();
     } catch (err) {
       setIsModalOpen(false);
-      setWaStatusValue('disconnected');
+      setStatus('whatsapp', 'disconnected');
       toastError(err);
     }
   };
@@ -125,7 +156,7 @@ export default function IntegrationsPage() {
         try {
           await waLogout();
           stopPolling();
-          setWaStatusValue('disconnected');
+          setStatus('whatsapp', 'disconnected');
           setWaQr(null);
           message.info(`WhatsApp ${translate('integration_disconnected')}`);
         } catch (err) {
@@ -135,9 +166,47 @@ export default function IntegrationsPage() {
     });
   };
 
-  const handleSwitch = (checked) => {
-    if (checked) handleConnect();
-    else confirmDisconnect();
+  const handleNotionSwitch = (checked) => {
+    if (checked) {
+      setNotionNickname('');
+      setNotionAccess('team');
+      setIsNotionModalOpen(true);
+    } else {
+      Modal.confirm({
+        title: translate('notion_disconnect_confirm'),
+        okText: translate('notion_disconnect'),
+        cancelText: translate('cancel'),
+        okButtonProps: { danger: true },
+        onOk: () => {
+          setStatus('notion', 'disconnected');
+          setNotionNickname('');
+          message.info(translate('notion_disconnected_success'));
+        },
+      });
+    }
+  };
+
+  const handleNotionModalCancel = () => {
+    setIsNotionModalOpen(false);
+  };
+
+  const handleNotionConnect = () => {
+    if (!notionNickname.trim()) {
+      message.error(translate('notion_nickname_required'));
+      return;
+    }
+    setStatus('notion', 'connected');
+    setIsNotionModalOpen(false);
+    message.success(translate('notion_connected_success'));
+  };
+
+  const handleSwitch = (item, checked) => {
+    if (item.id === 'whatsapp') {
+      if (checked) handleConnect();
+      else confirmDisconnect();
+    } else if (item.id === 'notion') {
+      handleNotionSwitch(checked);
+    }
   };
 
   // Closing the QR dialog before scanning cancels the attempt: stop polling,
@@ -145,10 +214,10 @@ export default function IntegrationsPage() {
   // instead of a stuck "connecting".
   const handleModalCancel = () => {
     setIsModalOpen(false);
-    if (waStatusValue === 'qr_pending') {
+    if (statuses.whatsapp === 'qr_pending') {
       stopPolling();
       setWaQr(null);
-      setWaStatusValue('disconnected');
+      setStatus('whatsapp', 'disconnected');
       waLogout().catch((err) => console.warn('WhatsApp connect cancel teardown failed:', err?.message));
     }
   };
@@ -158,7 +227,7 @@ export default function IntegrationsPage() {
     (async () => {
       try {
         const res = await waStatus();
-        setWaStatusValue(res.result?.status || 'disconnected');
+        setStatus('whatsapp', res.result?.status || 'disconnected');
         setWaQr(res.result?.qr || null);
       } catch (err) {
         // Don't error-toast just for opening the page, but log for debugging.
@@ -255,9 +324,9 @@ export default function IntegrationsPage() {
       <Row gutter={[24, 24]}>
         {filteredIntegrations.map((item) => {
           const isConnected = isItemConnected(item);
-          const statusValue = item.id === 'whatsapp' ? waStatusValue : 'disconnected';
+          const statusValue = statuses[item.id] ?? 'disconnected';
           return (
-            <Col xs={24} sm={12} md={8} key={item.id}>
+            <Col xs={24} sm={12} md={12} key={item.id}>
               <div
                 className={`whiteBox shadow integration-card${isConnected ? ' integration-card--connected' : ''}`}
                 style={{ cursor: 'default' }}
@@ -285,11 +354,11 @@ export default function IntegrationsPage() {
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                       <span style={{ fontSize: '12px', fontWeight: 500, color: colorFor(statusValue) }}>
-                        {translate(labelKeyFor(statusValue))}
+                        {translate(labelKeyFor(item, statusValue))}
                       </span>
                       <Switch
                         checked={isConnected}
-                        onChange={handleSwitch}
+                        onChange={(checked) => handleSwitch(item, checked)}
                       />
                     </div>
                   </div>
@@ -360,6 +429,70 @@ export default function IntegrationsPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Notion Connection Modal */}
+      <Modal
+        title={<div className="notion-modal-title">{translate('notion_modal_title')}</div>}
+        open={isNotionModalOpen}
+        onCancel={handleNotionModalCancel}
+        footer={null}
+        width={520}
+        centered
+        className="notion-connect-modal"
+      >
+        <div className="notion-modal-body">
+          {/* Form Content */}
+          <div className="notion-modal-form">
+            {/* Field 1: Nickname */}
+            <div className="notion-modal-field">
+              <span className="notion-modal-label">
+                {translate('notion_nickname_label')}
+              </span>
+              <Input
+                placeholder={translate('notion_nickname_placeholder')}
+                value={notionNickname}
+                onChange={(e) => setNotionNickname(e.target.value)}
+                className="notion-modal-input"
+              />
+            </div>
+
+            {/* Field 2: Access Level */}
+            <div className="notion-modal-field">
+              <span className="notion-modal-label">
+                {translate('notion_access_header')}
+              </span>
+              <Select
+                value={notionAccess}
+                onChange={(val) => setNotionAccess(val)}
+                className="notion-modal-select"
+                dropdownStyle={{ borderRadius: '8px' }}
+                options={[
+                  {
+                    value: 'team',
+                    label: translate('notion_access_team'),
+                  },
+                  {
+                    value: 'private',
+                    label: translate('notion_access_private'),
+                  },
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Footer Action Area */}
+          <div className="notion-modal-footer">
+            {/* Right Connect Button */}
+            <Button
+              type="primary"
+              onClick={handleNotionConnect}
+              className="notion-modal-btn"
+            >
+              {translate('notion_connect')}
+            </Button>
           </div>
         </div>
       </Modal>

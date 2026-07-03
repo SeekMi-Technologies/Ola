@@ -21,8 +21,8 @@ describe('thinkingLabels — TOOL_LABELS dictionary', () => {
       // Forward-looking: tools live on ZYD_FEAT, will activate when merged to dev
       'quote.generate_pdf_url',
       'salesperson.lookup_by_email',
-      // File / transcript (Plan B v3 phase D)
-      'file.search', 'file.get_transcript', 'file.transcription_status',
+      // File / transcript (Plan B v3 phase D + issue #387)
+      'file.search', 'file.get_transcript', 'file.transcription_status', 'file.transcribe',
     ];
     expect(Object.keys(TOOL_LABELS).sort()).toEqual(expected.sort());
   });
@@ -30,6 +30,11 @@ describe('thinkingLabels — TOOL_LABELS dictionary', () => {
   test('forward-looking entries resolve to specific labels (not __unknown__ fallback)', () => {
     expect(labelFor('mcp_ola_crm_quote.generate_pdf_url')).toBe('Ola is preparing the PDF link...');
     expect(labelFor('mcp_ola_crm_salesperson.lookup_by_email')).toBe('Ola is identifying the salesperson...');
+  });
+
+  test('file.transcribe resolves to correct in-progress label (issue #387)', () => {
+    expect(labelFor('file.transcribe')).toBe('Ola is requesting transcription...');
+    expect(labelFor('mcp_ola_crm_file.transcribe')).toBe('Ola is requesting transcription...');
   });
 
   test('transcribe_audio is unregistered — falls back to tool-name-aware label', () => {

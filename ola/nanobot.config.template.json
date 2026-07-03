@@ -9,7 +9,8 @@
       "temperature": 0.1,
       "maxToolIterations": 40,
       "reasoningEffort": null,
-      "timezone": "America/Los_Angeles"
+      "timezone": "America/Los_Angeles",
+      "disabledSkills": ["cron", "weather", "github", "tmux", "clawhub", "skill-creator", "my", "summarize", "memory"]
     }
   },
   "channels": {

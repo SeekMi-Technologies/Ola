@@ -383,6 +383,69 @@ describe('chat — done frame blocks + Mongo persistence', () => {
 });
 
 // ===========================================================================
+// [auto-analyze] — silent frontend trigger (issue #387)
+// ===========================================================================
+
+describe('chat — [auto-analyze] persistence behaviour', () => {
+  test('[auto-analyze] message → only assistant ChatMessage persisted (no user doc)', async () => {
+    nanoBotResponder = (_req, res) => {
+      startSSE(res);
+      res.write(nanoTextChunk('读取中，请稍候。\n这段录音是关于…'));
+      res.write(NANO_DONE);
+      res.end();
+    };
+    const app = buildChatApp();
+    // fileIds omitted: validateAndCollapseFileRefs skips loop and returns ok.
+    // The persistence behaviour we test is independent of whether files are attached.
+    await request(app).post('/api/ola/chat').send({ message: '[auto-analyze]' });
+
+    await new Promise((r) => setTimeout(r, 150));
+    const ChatMessage = mongoose.model('ChatMessage');
+    const msgs = await ChatMessage.find({}).sort({ created: 1 }).lean();
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].role).toBe('assistant');
+    expect(msgs[0].content).toBe('读取中，请稍候。\n这段录音是关于…');
+  });
+
+  test('[auto-analyze] does not expose marker in any persisted document', async () => {
+    nanoBotResponder = (_req, res) => {
+      startSSE(res);
+      res.write(nanoTextChunk('Analysis result'));
+      res.write(NANO_DONE);
+      res.end();
+    };
+    const app = buildChatApp();
+    await request(app).post('/api/ola/chat').send({ message: '[auto-analyze]' });
+
+    await new Promise((r) => setTimeout(r, 150));
+    const ChatMessage = mongoose.model('ChatMessage');
+    const msgs = await ChatMessage.find({}).lean();
+    for (const msg of msgs) {
+      expect(msg.content).not.toContain('[auto-analyze]');
+    }
+  });
+
+  test('normal message still persists both user + assistant docs', async () => {
+    nanoBotResponder = (_req, res) => {
+      startSSE(res);
+      res.write(nanoTextChunk('Reply'));
+      res.write(NANO_DONE);
+      res.end();
+    };
+    const app = buildChatApp();
+    await request(app).post('/api/ola/chat').send({ message: 'tell me about the file' });
+
+    await new Promise((r) => setTimeout(r, 100));
+    const ChatMessage = mongoose.model('ChatMessage');
+    const msgs = await ChatMessage.find({}).sort({ created: 1 }).lean();
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0].role).toBe('user');
+    expect(msgs[0].content).toBe('tell me about the file');
+    expect(msgs[1].role).toBe('assistant');
+  });
+});
+
+// ===========================================================================
 // Upstream error paths
 // ===========================================================================
 

@@ -14,8 +14,8 @@ These two files are **gitignored and never committed**. You cannot get them from
 
 | File | What to do |
 |---|---|
-| `backend/.env` | Copy `backend/.env.example` → `backend/.env`, then ask Yuandong to send you the real values for the 4 required keys (`DATABASE`, `JWT_SECRET`, `MCP_SERVICE_TOKEN`, `GEMINI_API_KEY`). |
-| `.secrets/SERVERS.env` | Create the folder and file yourself (`mkdir .secrets && touch .secrets/SERVERS.env`), then ask Yuandong to send you the full file content. This file holds all production server IPs, SSH credentials, and app secrets. |
+| `backend/.env` | Copy `backend/.env.example` → `backend/.env`, then ask Yuandong for the dev-shared values. This is the SINGLE source of local config — start-dev.sh reads only this. Required keys: `DATABASE` (the local-dev cluster `ola-local.dmbtqkq`), `JWT_SECRET`, `MCP_SERVICE_TOKEN`, `DEEPSEEK_API_KEY`, and the `ZOHO_*` set. See `backend/.env.example` for the full list. |
+| `.secrets/SERVERS.env` | **Only needed if you deploy to prod** (the `deploy` skill / SSH ops). Local dev via `start-dev.sh` does NOT read this — skip it unless Yuandong asks you to deploy. Holds prod server IPs, SSH creds, and app secrets. |
 
 **Do not proceed with `start-dev.sh` until `backend/.env` is filled in.**
 
@@ -27,7 +27,8 @@ plain chat proxy). It contains:
 - `nanobot-workspace/` — the 5 markdown files that define Ola's persona,
   behaviors, and tool-usage rules. Loaded by nanobot at startup.
 - `nanobot.config.template.json` — nanobot's config, with secrets replaced
-  by `${VAR}` placeholders. Rendered by `start-dev.sh` at first boot.
+  by `${VAR}` placeholders. Re-rendered by `start-dev.sh` on every start
+  (always overwritten — hand-edits to the rendered file are clobbered).
 
 ---
 
@@ -64,8 +65,8 @@ bootstrap correctly:
 
 ~/.nanobot/                         ← provisioned by start-dev.sh on first boot
 ├── config.json                     ← rendered from ola/nanobot.config.template.json
-│                                     (mode 600 — contains MCP_SERVICE_TOKEN +
-│                                     GEMINI_API_KEY substituted in)
+│                                     (mode 600 — MCP_SERVICE_TOKEN +
+│                                     DEEPSEEK_API_KEY + ZOHO_* substituted in)
 └── workspace/
     ├── SOUL.md   USER.md   AGENTS.md   TOOLS.md   HEARTBEAT.md
     │                                 (copied verbatim from ola/nanobot-workspace/)
@@ -142,24 +143,27 @@ ls ~/dev/      # → crm  nanobot
 test -d ~/dev/crm/backend && test -d ~/dev/nanobot/nanobot && echo "siblings OK"
 
 # ───────────────── 3. Get backend/.env from zyd ─────────────────
-# Ask zyd for the dev shared values for these 4 keys (paste over the
-# example file). Never commit this file — it's gitignored.
+# backend/.env is the SINGLE source of local config — start-dev.sh sources ONLY
+# this, never .secrets/SERVERS.env (that prod bundle is deploy-only). Ask zyd for
+# the dev-shared values, paste over the example. Never commit it — it's gitignored.
 cd ~/dev/crm
 cp backend/.env.example backend/.env
-# Now open backend/.env and fill these 4 (zyd will hand them over Slack/1Password):
-#   DATABASE=mongodb+srv://...        (DEV Atlas cluster `ola-dev.qc8fvks`, db `oladev` — #351.
-#                                      NEVER the prod URI: start-dev.sh fingerprint-compares
-#                                      against .secrets/SERVERS.env and refuses to start on match.
-#                                      Machines without .secrets/ skip the check.)
+# Fill these (zyd hands them over Slack/1Password):
+#   DATABASE=mongodb+srv://...@ola-local.dmbtqkq...   (the dedicated LOCAL-dev cluster.
+#                                      start-dev.sh whitelists host `ola-local.dmbtqkq` and
+#                                      REFUSES staging `ola-dev` / prod `cluster0`. db name is free.)
 #   JWT_SECRET=...                    (any 64-hex string; `openssl rand -hex 32`)
 #   MCP_SERVICE_TOKEN=...             (dev-shared value from zyd)
-#   GEMINI_API_KEY=AIza...            (zyd's dev key, OR your own from aistudio.google.com)
-# Fresh dev DB? Seed it once (admin@admin.com + default settings):
+#   DEEPSEEK_API_KEY=sk-...           (nanobot's default LLM; platform.deepseek.com)
+#   ZOHO_OLA_EMAIL / ZOHO_OLA_APP_PASSWORD / ZOHO_IMAP_HOST / ZOHO_SMTP_HOST
+#                                     (dev-shared from zyd — start-dev.sh renders the nanobot
+#                                      config from them and won't boot if any is missing)
+# Fresh local DB? Seed it once (admin@admin.com + default settings + indexes):
 #   cd backend && ADMIN_EMAIL=admin@admin.com ADMIN_PASSWORD=admin123 npm run setup
 
-# Verify:
-grep -E '^(DATABASE|JWT_SECRET|MCP_SERVICE_TOKEN|GEMINI_API_KEY)=' backend/.env | wc -l
-# → should print  4
+# Verify (all start-dev.sh-required keys present):
+grep -E '^(DATABASE|JWT_SECRET|MCP_SERVICE_TOKEN|DEEPSEEK_API_KEY|ZOHO_OLA_EMAIL|ZOHO_OLA_APP_PASSWORD|ZOHO_IMAP_HOST|ZOHO_SMTP_HOST)=' backend/.env | wc -l
+# → should print  8
 
 # ───────────────── 4. Project-root .env (only needed for docker compose) ─────
 # wzh/yili: SKIP this step. Required only for `docker compose up` (prod
@@ -236,8 +240,7 @@ Same as the wzh/yili 8-step quickstart above, plus:
   `ffmpeg` to compress large recordings to mono 16k MP3 so they fit under
   OpenAI's 25 MB upload cap. Without it, audio over 20 MB or any WAV/FLAC
   input fails with a specific error from the tool.
-- **Step 3 — add `OPENAI_API_KEY` to `backend/.env`** (or
-  `.secrets/SERVERS.env`, see secrets section below). Required when
+- **Step 3 — add `OPENAI_API_KEY` to `backend/.env`**. Required when
   exercising sales-coach: nanobot's `OpenAITranscriptionProvider` reads it
   from env. Get from
   [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
@@ -291,7 +294,7 @@ are derivative; they must be kept in sync with `.secrets/SERVERS.env`.
 
 ### Rotation SOP
 
-When rotating any secret (`MCP_SERVICE_TOKEN`, `JWT_SECRET`, `GEMINI_API_KEY`):
+When rotating any secret (`MCP_SERVICE_TOKEN`, `JWT_SECRET`, `DEEPSEEK_API_KEY`):
 
 ```bash
 # 1. Update .secrets/SERVERS.env locally with the new value.
@@ -302,7 +305,7 @@ nano .secrets/SERVERS.env
 ssh root@<box1-ip> 'cd /app/crm && nano backend/.env'
 ssh root@<box1-ip> 'cd /app/crm && docker compose restart backend mcp'
 
-# 3. If MCP_SERVICE_TOKEN or GEMINI_API_KEY rotated, also propagate to
+# 3. If MCP_SERVICE_TOKEN or DEEPSEEK_API_KEY rotated, also propagate to
 #    Box2 nanobot config (NanoBot uses both; JWT_SECRET is CRM-only).
 ssh root@<box2-ip> 'nano ~/.nanobot/config.json'
 ssh root@<box2-ip> 'systemctl restart nanobot'
@@ -328,7 +331,7 @@ was caught by fingerprint comparison; see memory
 |---|---|
 | `.secrets/SERVERS.env` | Canonical prod secrets — **single source of truth** |
 | `backend/.env` | Per-machine: dev secrets (locally) OR prod secrets (on Box1, where the file is **just `.env`** — docker-compose convention, not `.env.production`) |
-| `backend/.env.example` | Dev template — minimal subset (4 required keys) |
+| `backend/.env.example` | Dev template — local-dev key set (DATABASE→ola-local, JWT, MCP, DEEPSEEK, ZOHO_*) |
 | `backend/.env.box1.example` | Box1 prod template — full key set (14 keys including ALLOWED_ORIGINS, MCP_HOST, NANOBOT_HOST, etc.) |
 
 **`backend/.env.production` no longer exists locally.** It used to be a
@@ -342,16 +345,16 @@ removed in cleanup.
 When you run `bash start-dev.sh` on a fresh mac:
 
 1. Verifies `backend/.env` exists (fails fast if missing).
-2. If `~/.nanobot/config.json` does **not** exist → runs a short Node
-   subprocess that loads `backend/.env` via `dotenv` (so the parent shell
-   is **not** polluted), reads `MCP_SERVICE_TOKEN` and `GEMINI_API_KEY`,
-   substitutes them into `ola/nanobot.config.template.json`, and writes the
-   result to `~/.nanobot/config.json` (mode 600). Both secrets end up on
-   disk in this one file — current pinned NanoBot (via `pip install -e .`
-   in sibling `../Ola_bot/`) requires `providers.gemini.apiKey` to be
-   present in config at startup (`_make_provider` raises `ValueError` on
-   empty key; no env fallback).
-   The file is gitignored home-dir, owner-only.
+2. **Always** re-renders `~/.nanobot/config.json` from the template: a short
+   Node subprocess loads `backend/.env` via `dotenv` (so the parent shell is
+   **not** polluted), requires `MCP_SERVICE_TOKEN`, `DEEPSEEK_API_KEY`, and the
+   `ZOHO_*` set (refuses to start if any is missing), substitutes them into
+   `ola/nanobot.config.template.json`, and writes the result to
+   `~/.nanobot/config.json` (mode 600, owner-only). Hand-edits are clobbered
+   every start — edit the template or `backend/.env` instead. NanoBot's active
+   provider is `deepseek`, so `providers.deepseek.apiKey` must be present at
+   startup (`_make_provider` raises `ValueError` on an empty active-provider
+   key; no env fallback).
 3. Syncs Ola workspace md files into `~/.nanobot/workspace/`:
    - **Always overwrite** (canonical system prompts we own):
      `SOUL.md`, `AGENTS.md`, `TOOLS.md`. Any local edits get clobbered
@@ -359,25 +362,30 @@ When you run `bash start-dev.sh` on a fresh mac:
      the repo and commit instead.
    - **First-boot only** (per-user files): `USER.md`, `HEARTBEAT.md`.
      Skipped on subsequent boots so your personal customizations survive.
-4. Starts backend (8888), MCP server (8889), nanobot (8900), frontend (3000).
-   Each service reads `backend/.env` via its own `dotenv` call at startup.
+4. Starts backend (8888), MCP server (8889), nanobot serve (8900) + gateway
+   (8901), WhatsApp bridge, frontend (3000). Each service reads `backend/.env`
+   via its own `dotenv` call at startup.
 
-On subsequent boots, step 2 is a no-op if `~/.nanobot/config.json` already
-exists. Step 3's USER/HEARTBEAT pieces are no-ops if those files exist;
+On subsequent boots, step 2 still re-renders `config.json` every time (always
+overwrite). Step 3's USER/HEARTBEAT pieces are no-ops if those files exist;
 SOUL/AGENTS/TOOLS are re-copied every time. Your local agent memory and
 session history under `~/.nanobot/workspace/memory/` and
 `~/.nanobot/workspace/sessions/` are preserved across restarts.
 
 ## backend/.env — required variables
 
-Copy `backend/.env.example` to `backend/.env` and fill these four:
+Copy `backend/.env.example` to `backend/.env` and fill these (start-dev.sh
+refuses to boot if any is missing):
 
 | Variable | Where to get it |
 |---|---|
-| `DATABASE` | MongoDB connection string (ask zyd for the shared Atlas URI) |
+| `DATABASE` | The local-dev cluster URI (ask zyd). start-dev.sh whitelists host `ola-local.dmbtqkq` and refuses staging (ola-dev) / prod (cluster0). |
 | `JWT_SECRET` | Any strong random string — e.g. `openssl rand -hex 32` |
 | `MCP_SERVICE_TOKEN` | Loopback-only service token. Dev machines share the same value (ask zyd). Prod generates its own via `openssl rand -hex 32`. |
-| `GEMINI_API_KEY` | Personal key from [aistudio.google.com](https://aistudio.google.com) — do **not** share or commit. |
+| `DEEPSEEK_API_KEY` | NanoBot's default LLM provider. Ask zyd, or get from [platform.deepseek.com](https://platform.deepseek.com). |
+| `ZOHO_OLA_EMAIL` / `ZOHO_OLA_APP_PASSWORD` / `ZOHO_IMAP_HOST` / `ZOHO_SMTP_HOST` | Dev-shared from zyd — start-dev.sh renders the nanobot config from them. |
+
+`GEMINI_API_KEY` is optional (alternate provider) — only needed if you switch an agent off deepseek.
 
 **Sales-coach audio transcription** (full-stack only, optional for UI-only work):
 
@@ -515,5 +523,5 @@ under 20 MB still transcribe, but any WAV/FLAC or large file returns
 | `~/.nanobot/workspace/{USER,HEARTBEAT}.md` | no | per-user files — first-boot only, safe to edit locally |
 | `~/.nanobot/workspace/memory/` | no | runtime agent memory — per machine |
 | `~/.nanobot/workspace/sessions/` | no | chat session logs — per machine |
-| `~/.nanobot/config.json` | no (mode 600) | rendered config with real `MCP_SERVICE_TOKEN` + `GEMINI_API_KEY` substituted in |
+| `~/.nanobot/config.json` | no (mode 600) | rendered config — `MCP_SERVICE_TOKEN` + `DEEPSEEK_API_KEY` + `ZOHO_*` substituted in; re-rendered every start |
 | `../nanobot/` (sibling) | (separate repo) | NanoBot Python AI backbone — `SeekMi-Technologies/Ola_bot` fork. `ola-dev` for dev / `ola-main` for prod (repo default). PR `ola-dev` → `ola-main` to release |

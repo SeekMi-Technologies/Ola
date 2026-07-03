@@ -63,6 +63,7 @@ beforeEach(async () => {
   await Job.deleteMany({});
   jest.clearAllMocks();
   delete process.env.TRANSCRIPTION_PROVIDER;
+  delete process.env.TRANSCRIPTION_PROVIDER_LOCKED;
 });
 
 async function makeAdmin({ provider = null, email = 'x@y.com' } = {}) {
@@ -101,6 +102,24 @@ test('resolveProvider: admin field "paraformer" wins over env', async () => {
   const fileDoc = { createdBy: admin._id };
   const out = await resolveProvider(fileDoc);
   expect(out).toBe('paraformer');
+});
+
+test('resolveProvider: locked env wins over admin field', async () => {
+  process.env.TRANSCRIPTION_PROVIDER = 'paraformer';
+  process.env.TRANSCRIPTION_PROVIDER_LOCKED = 'true';
+  const admin = await makeAdmin({ provider: 'openai' });
+  const fileDoc = { createdBy: admin._id };
+  const out = await resolveProvider(fileDoc);
+  expect(out).toBe('paraformer');
+});
+
+test('resolveProvider: locked deployment requires an explicit provider', async () => {
+  process.env.TRANSCRIPTION_PROVIDER_LOCKED = 'true';
+  const admin = await makeAdmin({ provider: 'openai' });
+  const fileDoc = { createdBy: admin._id };
+  await expect(resolveProvider(fileDoc)).rejects.toThrow(
+    /TRANSCRIPTION_PROVIDER is required/
+  );
 });
 
 test('resolveProvider: env wins when admin field is null', async () => {

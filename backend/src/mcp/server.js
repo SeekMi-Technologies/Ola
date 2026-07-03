@@ -282,6 +282,54 @@ async function main() {
     }
   );
 
+  // GET /internal/file/:id/transcript — read completed sidecar transcript for
+  // nanobot WhatsApp channel. Delegates to fileController.getTranscript via
+  // runController so DB/file-read logic lives in a single place and all status
+  // codes (422 failed job, 409 processing, 404 not-found) are preserved exactly.
+  // Auth: service token + X-Acting-As (same as /internal/upload-audio).
+  app.get('/internal/file/:id/transcript', requireAuth, async (req, res) => {
+    const decision = await decideActingAdmin(req.headers['x-acting-as'], 'internal/file/transcript');
+    if (!decision.ok) {
+      return res.status(decision.status).json({ ok: false, code: decision.code, message: decision.message });
+    }
+    try {
+      const { runController } = require('@/mcp/adapters/controllerAdapter');
+      const fileController = require('@/controllers/appControllers/fileController');
+      const result = await runController(fileController.getTranscript, {
+        params: { id: req.params.id },
+        admin: decision.actingAdmin,
+      });
+      if (!result.ok) {
+        const codeToStatus = { VALIDATION: 400, PERMISSION: 403, NOT_FOUND: 404, CONFLICT: 409 };
+        return res.status(codeToStatus[result.code] || 500).json({ ok: false, code: result.code, message: result.message });
+      }
+      return res.json({ ok: true, transcript: result.data.transcript, originalName: result.data.originalName });
+    } catch (err) {
+      console.error('[internal/file/transcript] error:', err);
+      return res.status(500).json({ ok: false, code: 'INTERNAL', message: err.message });
+    }
+  });
+
+  // GET /internal/job/:id — lightweight job-status probe for nanobot WhatsApp
+  // channel to poll transcription progress. Requires X-Acting-As so job reads
+  // are scoped to the acting admin; prevents a service-token holder from reading
+  // any admin's job record.
+  app.get('/internal/job/:id', requireAuth, async (req, res) => {
+    const decision = await decideActingAdmin(req.headers['x-acting-as'], 'internal/job');
+    if (!decision.ok) {
+      return res.status(decision.status).json({ ok: false, code: decision.code, message: decision.message });
+    }
+    try {
+      const Job = require('mongoose').model('Job');
+      const job = await Job.findOne({ _id: req.params.id, createdBy: decision.actingAdmin._id }).lean();
+      if (!job) return res.status(404).json({ ok: false, code: 'NOT_FOUND', message: 'Job not found' });
+      return res.json({ ok: true, status: job.status, error: job.error || null });
+    } catch (err) {
+      console.error('[internal/job] error:', err);
+      return res.status(500).json({ ok: false, code: 'INTERNAL', message: err.message });
+    }
+  });
+
   // 全局 Express error handler —— 兜底任何未捕获的同步/异步异常
   // 必须放在所有路由之后，签名 4 个参数 Express 才识别为 error handler
   // eslint-disable-next-line no-unused-vars

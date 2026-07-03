@@ -97,6 +97,8 @@ jobs:
           NANOBOT_CONFIG_B64: ${{ secrets.STAGING_NANOBOT_CONFIG_B64 }}
           NANOBOT_ENV_B64: ${{ secrets.STAGING_NANOBOT_ENV_B64 }}
           CRM_UPLOAD_URL: http://${{ secrets.STAGING_TAILSCALE_IP }}:8889
+          CRM_TRANSCRIPTION_PROVIDER_LOCKED: "true"
+          CRM_BACKEND_PUBLIC_BASE_URL: https://staging.olatech.ai
         run: |
           set -euo pipefail
           install -d -m 700 rendered/crm/backend rendered/nanobot-state

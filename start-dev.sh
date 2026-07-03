@@ -1,314 +1,229 @@
 #!/bin/bash
-# Ola CRM — one-shot dev startup
-# Starts: backend (8888), MCP server (8889), NanoBot (8900), frontend (3000)
-# Usage: bash start-dev.sh
-
+# Ola CRM — local dev launcher (local-only; never used by deploy or CI).
+# Brings up: backend 8888 · MCP 8889 · nanobot serve 8900 · gateway 8901 ·
+# WhatsApp bridge · frontend 3000.  Stop with: bash stop-dev.sh
 set -e
 
 CRM_DIR="$(cd "$(dirname "$0")" && pwd)"
-# Repo was renamed nanobot → Ola_bot on GitHub. Prefer the new name; fall
-# back to the old one so machines cloned before the rename still work.
+
+# Sibling AI repo: prefer the renamed Ola_bot, fall back to the old nanobot path.
 if [ -d "$CRM_DIR/../Ola_bot" ]; then
   NANOBOT_DIR="$CRM_DIR/../Ola_bot"
 else
   NANOBOT_DIR="$CRM_DIR/../nanobot"
 fi
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# Host of the dedicated local-dev Atlas cluster. The DB guard whitelists this
+# and refuses everything else (staging ola-dev, prod cluster0, ...).
+LOCAL_DB_HOST="ola-local.dmbtqkq"
 
-echo ""
-echo "=== Ola CRM Dev Startup ==="
-echo ""
+# Local-dev seed admin (admin@admin.com) in the shared ola-local cluster, used to
+# pre-create its WhatsApp bridge auth dir. Re-seeding ola-local mints a new _id —
+# find it with: mongosh "$DATABASE" --quiet --eval 'db.admins.findOne({},{_id:1})'
+DEV_ADMIN_ID="6a2dda1adf0fb4e9881a34c9"
 
-# Kill any existing processes on our ports
-# 8901 (nanobot gateway) included after Plan B v3 phase G — old gateway
-# instances from previous start-dev.sh runs held 8901, causing new gateway
-# spawn to crash with EADDRINUSE while serve/backend silently restarted.
-for PORT in 8888 8889 8900 8901 3000; do
-  PID=$(lsof -ti:$PORT 2>/dev/null || true)
-  if [ -n "$PID" ]; then
-    echo -e "${YELLOW}Killing existing process on port $PORT (PID: $PID)${NC}"
-    kill -9 $PID 2>/dev/null || true
-    sleep 0.5
-  fi
-done
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
-# 0. Pre-flight — verify backend/.env, provision ~/.nanobot/ on first boot
-echo -e "${GREEN}[1/5] Pre-flight: checking backend/.env and nanobot workspace...${NC}"
-
-if [ ! -f "$CRM_DIR/backend/.env" ]; then
-  echo -e "${RED}     Missing $CRM_DIR/backend/.env${NC}"
-  echo -e "${YELLOW}     Copy backend/.env.example to backend/.env and fill in required values (see ola/SETUP.md).${NC}"
+log()  { echo -e "${GREEN}$*${NC}"; }
+warn() { echo -e "${YELLOW}$*${NC}"; }
+# fail "<headline>" ["<hint>" ...] — print in red/yellow and abort.
+fail() {
+  echo -e "${RED}REFUSING TO START: $1${NC}"; shift
+  for line in "$@"; do echo -e "${YELLOW}$line${NC}"; done
   exit 1
-fi
-
-# Export secrets to shell so all child processes (backend, MCP, nanobot serve,
-# nanobot gateway, frontend) inherit them via 12-factor process env. Mirrors
-# prod systemd EnvironmentFile= / docker-compose env_file: pattern.
-set -a
-source "$CRM_DIR/backend/.env"
-# #351 — capture the dev DATABASE before SERVERS.env (prod canonical, defines
-# its own DATABASE) overrides it in the shell env. dotenv never overrides an
-# existing env var, so a leaked prod URI here would silently win over
-# backend/.env inside every child process.
-DEV_DATABASE="${DATABASE:-}"
-if [ -f "$CRM_DIR/.secrets/SERVERS.env" ]; then
-  source "$CRM_DIR/.secrets/SERVERS.env"
-fi
-set +a
-
-# #351 — DB isolation guard. Re-pin DATABASE to the backend/.env value, then
-# refuse to start if it still points at the prod host/db from SERVERS.env.
-# Machines without .secrets/ (no prod secrets present) skip the comparison.
-_db_fingerprint() {
-  printf '%s' "$1" | tr -d "'\"" | sed -E 's#^mongodb(\+srv)?://##; s#^[^@/]+@##; s#\?.*$##'
 }
-if [ -z "$DEV_DATABASE" ]; then
-  echo -e "${RED}REFUSING TO START: backend/.env does not set DATABASE.${NC}"
-  echo -e "${YELLOW}Set DATABASE to the Ola-Dev Atlas URI (see ola/SETUP.md and #351).${NC}"
-  exit 1
-fi
-export DATABASE="$DEV_DATABASE"
-if [ -f "$CRM_DIR/.secrets/SERVERS.env" ]; then
-  PROD_DATABASE=$(grep -E '^DATABASE=' "$CRM_DIR/.secrets/SERVERS.env" | tail -1 | cut -d= -f2- || true)
-  if [ -n "$PROD_DATABASE" ] && [ "$(_db_fingerprint "$DEV_DATABASE")" = "$(_db_fingerprint "$PROD_DATABASE")" ]; then
-    echo -e "${RED}REFUSING TO START: backend/.env DATABASE points at the PRODUCTION database${NC}"
-    echo -e "${RED}($(_db_fingerprint "$PROD_DATABASE") — same host/db as .secrets/SERVERS.env).${NC}"
-    echo -e "${YELLOW}Point DATABASE at the Ola-Dev cluster instead (see ola/SETUP.md and #351).${NC}"
-    exit 1
-  fi
-fi
 
-# #266 Item 3 — fail-fast if backend/.env declares OLA_ENV=prod. Local dev
-# must never point at the production Atlas cluster: cross-env writes pollute
-# the shared DB with host-specific paths and other dev artifacts (see #266
-# Bug 3+4 for the original incident). Prod boxes set OLA_ENV=prod in their
-# .env; local dev leaves it unset OR sets =dev.
-if [ "${OLA_ENV:-dev}" = "prod" ]; then
-  echo -e "${RED}REFUSING TO START: backend/.env has OLA_ENV=prod.${NC}"
-  echo -e "${YELLOW}start-dev.sh is for local development only. Set OLA_ENV=dev (or unset it)${NC}"
-  echo -e "${YELLOW}in backend/.env before running this script. See #266 for context.${NC}"
-  exit 1
-fi
+free_ports() {
+  for p in "$@"; do
+    local pid; pid=$(lsof -ti:"$p" 2>/dev/null || true)
+    if [ -n "$pid" ]; then warn "Freeing port $p (PID $pid)"; kill -9 $pid 2>/dev/null || true; sleep 0.5; fi
+  done
+}
 
-# Always-overwrite render of ~/.nanobot/config.json. Single source of truth
-# is the vendored template + secrets; manual edits to ~/.nanobot/config.json
-# WILL be clobbered on next start (matches the SOUL/AGENTS/TOOLS pattern
-# below). Edit ola/nanobot.config.template.json or .secrets/SERVERS.env
-# instead. Runtime state (memory/, sessions/) lives in sibling files and is
-# untouched.
-mkdir -p "$HOME/.nanobot"
-(cd "$CRM_DIR/backend" && node -e '
-  const path = require("path");
-  require("dotenv").config();
-  require("dotenv").config({ path: path.join(process.argv[2], ".secrets/SERVERS.env") });
-  const fs = require("fs"), os = require("os");
-  const required = [
-    "MCP_SERVICE_TOKEN", "DEEPSEEK_API_KEY",
-    "ZOHO_OLA_EMAIL", "ZOHO_OLA_APP_PASSWORD",
-    "ZOHO_IMAP_HOST", "ZOHO_SMTP_HOST",
-  ];
-  const missing = required.filter((k) => !process.env[k]);
-  if (missing.length) {
-    console.error("[provision] Missing env vars: " + missing.join(", ") + " — check backend/.env and .secrets/SERVERS.env");
-    process.exit(1);
-  }
-  const tpl = fs.readFileSync(process.argv[1], "utf8");
-  const rendered = tpl.replace(/\$\{(\w+)\}/g, (_, k) => process.env[k] || "");
-  const dest = path.join(os.homedir(), ".nanobot", "config.json");
-  fs.writeFileSync(dest, rendered, { mode: 0o600 });
-' "$CRM_DIR/ola/nanobot.config.template.json" "$CRM_DIR")
-echo -e "     ${GREEN}Rendered ~/.nanobot/config.json (mode 600, always-overwrite)${NC}"
+# wait_port <port> <label> — block until bound (15s); informational, never fatal.
+wait_port() {
+  printf '     waiting for %s' "$2"
+  for _ in $(seq 1 15); do
+    if lsof -ti:"$1" >/dev/null 2>&1; then echo -e " ${GREEN}ok${NC}"; return 0; fi
+    sleep 1
+  done
+  echo -e " ${RED}timeout${NC}"; return 0
+}
 
-# Sync Ola workspace prompts into ~/.nanobot/workspace/.
-# Two categories with different sync rules:
-#   - Canonical system prompts (SOUL/AGENTS/TOOLS) — we own them, ALWAYS
-#     overwrite so every operator picks up prompt updates on next start.
-#     Any local edit to ~/.nanobot/workspace/SOUL.md will be clobbered;
-#     edit ola/nanobot-workspace/SOUL.md in the repo instead.
-#   - Per-user files (USER/HEARTBEAT) — first-boot only, never clobber.
-mkdir -p "$HOME/.nanobot/workspace"
-for f in SOUL.md AGENTS.md TOOLS.md; do
-  if [ -f "$CRM_DIR/ola/nanobot-workspace/$f" ]; then
-    cp "$CRM_DIR/ola/nanobot-workspace/$f" "$HOME/.nanobot/workspace/$f"
-  fi
-done
-# Sync workspace skills (always-overwrite for canonical Ola skills)
-if [ -d "$CRM_DIR/ola/nanobot-workspace/skills" ]; then
-  rm -rf "$HOME/.nanobot/workspace/skills"
-  cp -R "$CRM_DIR/ola/nanobot-workspace/skills" "$HOME/.nanobot/workspace/"
-  echo -e "     ${GREEN}Synced canonical skills/ → ~/.nanobot/workspace/skills/${NC}"
-fi
-echo -e "     ${GREEN}Synced canonical prompts (SOUL/AGENTS/TOOLS) → ~/.nanobot/workspace/${NC}"
-for f in USER.md HEARTBEAT.md; do
-  if [ ! -f "$HOME/.nanobot/workspace/$f" ] && [ -f "$CRM_DIR/ola/nanobot-workspace/$f" ]; then
-    cp "$CRM_DIR/ola/nanobot-workspace/$f" "$HOME/.nanobot/workspace/$f"
-    echo -e "     ${GREEN}Provisioned $f (first boot)${NC}"
-  fi
-done
-
-# 1. Backend
-echo -e "${GREEN}[2/5] Starting backend (port 8888) with nodemon hot reload...${NC}"
-cd "$CRM_DIR/backend"
-npx nodemon src/server.js --ignore public/ > /tmp/ola-backend.log 2>&1 &
-BACKEND_PID=$!
-
-# Wait for backend to bind port before starting MCP (both need MongoDB)
-echo -n "     Waiting for backend..."
-for i in $(seq 1 15); do
-  if lsof -ti:8888 >/dev/null 2>&1; then
-    echo -e " ${GREEN}ok${NC}"
-    break
-  fi
-  sleep 1
-  if [ $i -eq 15 ]; then
-    echo -e " ${RED}timeout${NC}"
-  fi
-done
-
-# 2. MCP Server
-echo -e "${GREEN}[3/5] Starting MCP server (port 8889) with nodemon hot reload...${NC}"
-cd "$CRM_DIR/backend"
-npx nodemon --watch src/mcp src/mcp/server.js > /tmp/ola-mcp.log 2>&1 &
-MCP_PID=$!
-
-# Wait for MCP to bind port before later check_port falsely flags FAILED
-echo -n "     Waiting for MCP..."
-for i in $(seq 1 15); do
-  if lsof -ti:8889 >/dev/null 2>&1; then
-    echo -e " ${GREEN}ok${NC}"
-    break
-  fi
-  sleep 1
-  if [ $i -eq 15 ]; then
-    echo -e " ${RED}timeout${NC}"
-  fi
-done
-
-# #273 — macOS system proxy (Clash on 7897) returns 403 for api.deepseek.com.
-# Bypass proxy for DeepSeek so Python urllib connects directly.
-export no_proxy="api.deepseek.com,localhost,127.0.0.1,${no_proxy:-}"
-export NO_PROXY="api.deepseek.com,localhost,127.0.0.1,${NO_PROXY:-}"
-
-# 3. NanoBot — two processes:
-#   serve   (8900) — OpenAI-compat /v1/chat/completions for askola web
-#   gateway (8901) — ChannelManager (email/etc) + cron + heartbeat
-# These are mutually exclusive in a single process; channels never start
-# under serve mode. Both share the same ~/.nanobot/config.json + workspace.
-if [ -d "$NANOBOT_DIR" ]; then
-  echo -e "${GREEN}[4a/5] Starting NanoBot serve (port 8900) — askola chat completions...${NC}"
-  cd "$NANOBOT_DIR"
-  python -m nanobot serve > /tmp/ola-nanobot.log 2>&1 &
-  NANOBOT_PID=$!
-
-  echo -e "${GREEN}[4b/5] Starting NanoBot gateway (port 8901) — channels (email/etc)...${NC}"
-  python -m nanobot gateway --port 8901 > /tmp/ola-nanobot-gateway.log 2>&1 &
-  NANOBOT_GATEWAY_PID=$!
-
-  # 4c. WhatsApp bridge (single shared, dev-only convenience).
-  #
-  # OS-assigned port (listen(0)) written to ~/.nanobot/wa/bridge.port; nanobot
-  # WhatsAppChannel reads it dynamically. Default dev admin = admin@admin.com
-  # (699245d5...) — multi-dev 同时跑会撞 WA linked device, 接受 ("顶号就顶号").
-  #
-  # NB. ~/.nanobot/wa/<adminId>/auth/ mkdir 在 nanobot 走 file-system scan 阶段
-  # 是必须的; 当 #181 H2' event-driven sync 切上线后这步可以删 (届时 nanobot
-  # 启动调 CRM /api/internal/wa/enabled-admins 拿 list, 不依赖 fs scan).
-  echo -e "${GREEN}[4c/5] Starting WhatsApp bridge — default admin admin@admin.com...${NC}"
-  # Defensive: kill orphan bridge processes from incomplete prior stop-dev. Without
-  # this, multiple bridges share the same per-admin creds.json → WhatsApp replies
-  # status 440 (connectionReplaced) in a 5s reconnect loop. The pattern matches
-  # `node dist/index.js` (bridge process cwd is bridge/, but the command line does
-  # not include "bridge/" — earlier patterns mismatched, accumulating orphans).
-  pkill -f "node dist/index\.js" 2>/dev/null && echo "     Killed orphan bridge(s) from prior session" || true
-  sleep 1
-
-  # Belt-and-suspenders: wipe ALL admin WA auth state every start. Operators
-  # who ctrl+c instead of running stop-dev.sh leave behind stale auth dirs +
-  # portfiles; this guarantees fresh QR scan every start regardless of how
-  # the previous session ended. Default dev admin auth dir re-created below.
-  # Other test admins (e.g. for cross-tenant scenarios) need to be re-mkdir'd
-  # by hand each session.
-  if [ -d "$HOME/.nanobot/wa" ] && [ "$(ls -A "$HOME/.nanobot/wa" 2>/dev/null)" ]; then
-    rm -rf "$HOME/.nanobot/wa"/*
-    echo "     Wiped previous WA state (all admin auth + portfiles cleared)"
-  fi
-
-  if [ ! -f "$NANOBOT_DIR/bridge/dist/index.js" ]; then
-    echo -n "     Building bridge (first run)..."
-    (cd "$NANOBOT_DIR/bridge" && npm install --silent --no-audit --no-fund && npm run build) > /tmp/ola-wa-bridge-build.log 2>&1
-    if [ -f "$NANOBOT_DIR/bridge/dist/index.js" ]; then
-      echo -e " ${GREEN}ok${NC}"
-    else
-      echo -e " ${RED}FAILED${NC} — check /tmp/ola-wa-bridge-build.log"
-    fi
-  fi
-  mkdir -p "$HOME/.nanobot/wa/6a28ac13a144dca927a5bfc1/auth"
-  cd "$NANOBOT_DIR/bridge"
-  AUTH_ROOT="$HOME/.nanobot/wa" nohup node dist/index.js > /tmp/ola-wa-bridge.log 2>&1 &
-  WA_BRIDGE_PID=$!
-else
-  echo -e "${YELLOW}[4/5] NanoBot directory not found at $NANOBOT_DIR, skipping${NC}"
-  NANOBOT_PID=""
-  NANOBOT_GATEWAY_PID=""
-  WA_BRIDGE_PID=""
-fi
-
-# 4. Frontend
-echo -e "${GREEN}[5/5] Starting frontend (port 3000)...${NC}"
-cd "$CRM_DIR/frontend"
-npx vite --port 3000 > /tmp/ola-frontend.log 2>&1 &
-FRONTEND_PID=$!
-
-# Wait for remaining services to come up
-sleep 5
-
-echo ""
-echo "=== Status ==="
-
+# check_port <port> <label> <log-slug>
 check_port() {
-  if lsof -ti:$1 >/dev/null 2>&1; then
+  if lsof -ti:"$1" >/dev/null 2>&1; then
     echo -e "  $2: ${GREEN}running${NC} (port $1)"
   else
     echo -e "  $2: ${RED}FAILED${NC} — check /tmp/ola-$3.log"
   fi
 }
 
+echo
+echo "=== Ola CRM Dev Startup ==="
+echo
+
+free_ports 8888 8889 8900 8901 3000
+
+# ── Load local config ────────────────────────────────────────────────────────
+# backend/.env is the SINGLE source of local config (DB + API keys + nanobot
+# secrets). The prod bundle .secrets/SERVERS.env is deploy-only and is never
+# sourced here. set -a exports every var so child processes inherit it.
+log "[1/5] Pre-flight: backend/.env + nanobot workspace"
+[ -f "$CRM_DIR/backend/.env" ] || fail \
+  "missing $CRM_DIR/backend/.env" \
+  "Copy backend/.env.example → backend/.env and fill it in (see ola/SETUP.md)."
+set -a
+source "$CRM_DIR/backend/.env"
+set +a
+
+# ── DB isolation guard ───────────────────────────────────────────────────────
+# Positive whitelist: local dev runs ONLY against $LOCAL_DB_HOST, so a stray
+# staging/prod URI in backend/.env can never let local processes write a shared DB.
+[ -n "${DATABASE:-}" ] || fail \
+  "backend/.env does not set DATABASE." \
+  "Point it at the local-dev cluster ($LOCAL_DB_HOST). See ola/SETUP.md."
+case "$DATABASE" in
+  *"$LOCAL_DB_HOST"*) ;;
+  *) fail \
+      "DATABASE is not the local-dev cluster ($LOCAL_DB_HOST)." \
+      "Got host: $(printf '%s' "$DATABASE" | sed 's#.*@##; s#/.*##')" \
+      "start-dev.sh runs ONLY against $LOCAL_DB_HOST — staging/prod are off-limits. Fix backend/.env." ;;
+esac
+[ "${OLA_ENV:-dev}" != "prod" ] || fail \
+  "backend/.env has OLA_ENV=prod — start-dev.sh is local-only." \
+  "Unset OLA_ENV or set it to dev."
+
+# ── Render ~/.nanobot/config.json ────────────────────────────────────────────
+# Always overwritten from the vendored template + backend/.env. Hand-edits are
+# clobbered every start; change ola/nanobot.config.template.json or backend/.env.
+# Runtime state (memory/, sessions/) lives alongside and is untouched.
+mkdir -p "$HOME/.nanobot"
+(cd "$CRM_DIR/backend" && node -e '
+  const fs = require("fs"), os = require("os"), path = require("path");
+  require("dotenv").config();
+  const required = [
+    "MCP_SERVICE_TOKEN", "DEEPSEEK_API_KEY",
+    "ZOHO_OLA_EMAIL", "ZOHO_OLA_APP_PASSWORD", "ZOHO_IMAP_HOST", "ZOHO_SMTP_HOST",
+  ];
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.error("[provision] missing in backend/.env: " + missing.join(", "));
+    process.exit(1);
+  }
+  const tpl = fs.readFileSync(process.argv[1], "utf8");
+  const rendered = tpl.replace(/\$\{(\w+)\}/g, (_, k) => process.env[k] || "");
+  fs.writeFileSync(path.join(os.homedir(), ".nanobot", "config.json"), rendered, { mode: 0o600 });
+' "$CRM_DIR/ola/nanobot.config.template.json")
+log "     rendered ~/.nanobot/config.json (mode 600)"
+
+# ── Sync Ola workspace prompts/skills ────────────────────────────────────────
+# Canonical prompts (SOUL/AGENTS/TOOLS) + skills are always overwritten so every
+# start picks up repo updates; per-user files (USER/HEARTBEAT) seed once.
+mkdir -p "$HOME/.nanobot/workspace"
+for f in SOUL.md AGENTS.md TOOLS.md; do
+  [ -f "$CRM_DIR/ola/nanobot-workspace/$f" ] && cp "$CRM_DIR/ola/nanobot-workspace/$f" "$HOME/.nanobot/workspace/$f"
+done
+if [ -d "$CRM_DIR/ola/nanobot-workspace/skills" ]; then
+  rm -rf "$HOME/.nanobot/workspace/skills"
+  cp -R "$CRM_DIR/ola/nanobot-workspace/skills" "$HOME/.nanobot/workspace/"
+fi
+for f in USER.md HEARTBEAT.md; do
+  if [ ! -f "$HOME/.nanobot/workspace/$f" ] && [ -f "$CRM_DIR/ola/nanobot-workspace/$f" ]; then
+    cp "$CRM_DIR/ola/nanobot-workspace/$f" "$HOME/.nanobot/workspace/$f"
+    log "     provisioned $f (first boot)"
+  fi
+done
+log "     synced canonical prompts + skills → ~/.nanobot/workspace/"
+
+# ── Backend (8888) + MCP (8889) ──────────────────────────────────────────────
+log "[2/5] backend (8888) — nodemon hot reload"
+cd "$CRM_DIR/backend"
+npx nodemon src/server.js --ignore public/ > /tmp/ola-backend.log 2>&1 &
+BACKEND_PID=$!
+wait_port 8888 "backend"   # bind before MCP — both need MongoDB
+
+log "[3/5] MCP server (8889) — nodemon hot reload"
+npx nodemon --watch src/mcp src/mcp/server.js > /tmp/ola-mcp.log 2>&1 &
+MCP_PID=$!
+wait_port 8889 "MCP"
+
+# macOS system proxy (Clash on 7897) 403s api.deepseek.com — bypass it so
+# nanobot's Python client connects directly.
+export no_proxy="api.deepseek.com,localhost,127.0.0.1,${no_proxy:-}"
+export NO_PROXY="api.deepseek.com,localhost,127.0.0.1,${NO_PROXY:-}"
+
+# ── NanoBot serve + gateway + WhatsApp bridge ────────────────────────────────
+# serve (8900) = askola /v1/chat/completions; gateway (8901) = channels + cron +
+# heartbeat. Mutually exclusive per process; both share ~/.nanobot config + workspace.
+if [ -d "$NANOBOT_DIR" ]; then
+  log "[4/5] nanobot serve (8900) + gateway (8901)"
+  cd "$NANOBOT_DIR"
+  python -m nanobot serve > /tmp/ola-nanobot.log 2>&1 &
+  NANOBOT_PID=$!
+  python -m nanobot gateway --port 8901 > /tmp/ola-nanobot-gateway.log 2>&1 &
+  NANOBOT_GATEWAY_PID=$!
+
+  # WhatsApp bridge (single shared, dev convenience). Kill orphan bridges first:
+  # two bridges sharing one admin creds.json → 440 connectionReplaced reconnect loop.
+  log "     WhatsApp bridge — default admin admin@admin.com"
+  pkill -f "node dist/index\.js" 2>/dev/null && echo "     killed orphan bridge(s)" || true
+  sleep 1
+
+  # Wipe ALL admin WA auth every start so a clean QR scan is guaranteed regardless
+  # of how the prior session ended (ctrl+c leaves stale auth dirs + portfiles).
+  if [ -d "$HOME/.nanobot/wa" ] && [ -n "$(ls -A "$HOME/.nanobot/wa" 2>/dev/null)" ]; then
+    rm -rf "$HOME/.nanobot/wa"/*
+    echo "     wiped previous WA state"
+  fi
+
+  if [ ! -f "$NANOBOT_DIR/bridge/dist/index.js" ]; then
+    printf '     building bridge (first run)...'
+    (cd "$NANOBOT_DIR/bridge" && npm install --silent --no-audit --no-fund && npm run build) > /tmp/ola-wa-bridge-build.log 2>&1
+    [ -f "$NANOBOT_DIR/bridge/dist/index.js" ] && echo -e " ${GREEN}ok${NC}" || echo -e " ${RED}FAILED${NC} — see /tmp/ola-wa-bridge-build.log"
+  fi
+  mkdir -p "$HOME/.nanobot/wa/$DEV_ADMIN_ID/auth"
+  cd "$NANOBOT_DIR/bridge"
+  AUTH_ROOT="$HOME/.nanobot/wa" nohup node dist/index.js > /tmp/ola-wa-bridge.log 2>&1 &
+  WA_BRIDGE_PID=$!
+else
+  warn "[4/5] nanobot dir not found at $NANOBOT_DIR — skipping serve/gateway/bridge"
+  NANOBOT_PID=""; NANOBOT_GATEWAY_PID=""; WA_BRIDGE_PID=""
+fi
+
+# ── Frontend (3000) ──────────────────────────────────────────────────────────
+log "[5/5] frontend (3000) — vite"
+cd "$CRM_DIR/frontend"
+npx vite --port 3000 > /tmp/ola-frontend.log 2>&1 &
+FRONTEND_PID=$!
+
+sleep 5
+
+echo
+echo "=== Status ==="
 check_port 8888 "Backend         " "backend"
 check_port 8889 "MCP             " "mcp"
-if [ -n "$NANOBOT_PID" ]; then
-  check_port 8900 "NanoBot serve   " "nanobot"
-fi
-if [ -n "$NANOBOT_GATEWAY_PID" ]; then
-  check_port 8901 "NanoBot gateway " "nanobot-gateway"
-fi
+if [ -n "$NANOBOT_PID" ]; then check_port 8900 "NanoBot serve   " "nanobot"; fi
+if [ -n "$NANOBOT_GATEWAY_PID" ]; then check_port 8901 "NanoBot gateway " "nanobot-gateway"; fi
 if [ -n "$WA_BRIDGE_PID" ] && [ -f "$HOME/.nanobot/wa/bridge.port" ]; then
   BRIDGE_PORT=$(cat "$HOME/.nanobot/wa/bridge.port")
   if kill -0 "$WA_BRIDGE_PID" 2>/dev/null; then
-    # Default dev admin (admin@admin.com): if creds.json exists, Baileys auto-reconnects
-    # silently; if missing, user needs to scan QR from the bridge log.
-    DEFAULT_ADMIN_AUTH="$HOME/.nanobot/wa/6a28ac13a144dca927a5bfc1/auth/creds.json"
-    if [ -f "$DEFAULT_ADMIN_AUTH" ]; then
-      WA_STATUS_NOTE="admin@admin.com auto-reconnect (creds.json present)"
+    # creds.json present → Baileys auto-reconnects; missing → scan the QR from the log.
+    if [ -f "$HOME/.nanobot/wa/$DEV_ADMIN_ID/auth/creds.json" ]; then
+      WA_NOTE="admin@admin.com auto-reconnect (creds.json present)"
     else
-      # QR ASCII is ~30 lines tall — default tail -f shows last 10, truncating
-      # the top. Use -n 100 so the full QR + startup lines are visible at once.
-      WA_STATUS_NOTE="📱 admin@admin.com FIRST scan needed — run: tail -n 100 -f /tmp/ola-wa-bridge.log"
+      WA_NOTE="FIRST scan needed — run: tail -n 100 -f /tmp/ola-wa-bridge.log"
     fi
-    echo -e "  WA bridge       : ${GREEN}running${NC} (port $BRIDGE_PORT) — $WA_STATUS_NOTE"
+    echo -e "  WA bridge       : ${GREEN}running${NC} (port $BRIDGE_PORT) — $WA_NOTE"
   else
     echo -e "  WA bridge       : ${RED}FAILED${NC} — check /tmp/ola-wa-bridge.log"
   fi
 fi
 check_port 3000 "Frontend        " "frontend"
 
-echo ""
+echo
 echo "Logs: /tmp/ola-{backend,mcp,nanobot,nanobot-gateway,wa-bridge,frontend}.log"
-echo "Stop all: bash $CRM_DIR/stop-dev.sh"
-echo ""
+echo "Stop: bash $CRM_DIR/stop-dev.sh"
+echo
 
-# Save PIDs for stop script
 echo "$BACKEND_PID $MCP_PID $NANOBOT_PID $NANOBOT_GATEWAY_PID $WA_BRIDGE_PID $FRONTEND_PID" > /tmp/ola-dev-pids
