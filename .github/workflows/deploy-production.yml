@@ -23,6 +23,7 @@ permissions:
 jobs:
   resolve:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 5
     env:
       INPUT_CRM_SHA: ${{ inputs.crm_sha }}
