@@ -50,14 +50,14 @@ jobs:
           STAGING_USER: ${{ secrets.STAGING_USER }}
         run: |
           set -euo pipefail
-          if [[ -n "$INPUT_CRM_SHA" || -n "$INPUT_NANOBOT_SHA" ]]; then
-            crm="$INPUT_CRM_SHA"
-            bot="$INPUT_NANOBOT_SHA"
-          else
+          crm="$INPUT_CRM_SHA"
+          bot="$INPUT_NANOBOT_SHA"
+          # Fill each field independently from staging last-green when its input is blank.
+          if [[ -z "$crm" || -z "$bot" ]]; then
             release="$(ssh -i ~/.ssh/deploy_key "$STAGING_USER@$STAGING_HOST" \
               'cat /opt/ola-staging/last-green.env')"
-            crm="$(printf '%s\n' "$release" | sed -n 's/^CRM_SHA=//p')"
-            bot="$(printf '%s\n' "$release" | sed -n 's/^NANOBOT_SHA=//p')"
+            [[ -n "$crm" ]] || crm="$(printf '%s\n' "$release" | sed -n 's/^CRM_SHA=//p')"
+            [[ -n "$bot" ]] || bot="$(printf '%s\n' "$release" | sed -n 's/^NANOBOT_SHA=//p')"
           fi
           [[ "$crm" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid CRM SHA"; exit 1; }
           [[ "$bot" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid nanobot SHA"; exit 1; }
