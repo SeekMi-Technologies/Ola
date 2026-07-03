@@ -1,14 +1,16 @@
 name: Promote Production
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       crm_sha:
-        description: Exact 40-character Ola SHA promoted from staging
-        required: true
+        description: Exact 40-character Ola SHA (blank = use staging last-green)
+        required: false
       nanobot_sha:
-        description: Exact 40-character Ola_bot SHA promoted from staging
-        required: true
+        description: Exact 40-character Ola_bot SHA (blank = use staging last-green)
+        required: false
 
 concurrency:
   group: ola-production
@@ -19,13 +21,80 @@ permissions:
   packages: read
 
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      INPUT_CRM_SHA: ${{ inputs.crm_sha }}
+      INPUT_NANOBOT_SHA: ${{ inputs.nanobot_sha }}
+    outputs:
+      crm_sha: ${{ steps.resolve.outputs.crm_sha }}
+      nanobot_sha: ${{ steps.resolve.outputs.nanobot_sha }}
+      skip: ${{ steps.skip.outputs.skip }}
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Resolve release pair
+        id: resolve
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$INPUT_CRM_SHA" || -n "$INPUT_NANOBOT_SHA" ]]; then
+            crm="$INPUT_CRM_SHA"
+            bot="$INPUT_NANOBOT_SHA"
+          else
+            release="$(ssh -i ~/.ssh/deploy_key "$STAGING_USER@$STAGING_HOST" \
+              'cat /opt/ola-staging/last-green.env')"
+            crm="$(printf '%s\n' "$release" | sed -n 's/^CRM_SHA=//p')"
+            bot="$(printf '%s\n' "$release" | sed -n 's/^NANOBOT_SHA=//p')"
+          fi
+          [[ "$crm" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid CRM SHA"; exit 1; }
+          [[ "$bot" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid nanobot SHA"; exit 1; }
+          printf 'crm_sha=%s\n' "$crm" >> "$GITHUB_OUTPUT"
+          printf 'nanobot_sha=%s\n' "$bot" >> "$GITHUB_OUTPUT"
+
+      - name: Skip when pair already live in production
+        id: skip
+        env:
+          BOX1_HOST: ${{ secrets.PRODUCTION_BOX1_HOST }}
+          BOX1_USER: ${{ secrets.PRODUCTION_BOX1_USER }}
+          CRM_SHA: ${{ steps.resolve.outputs.crm_sha }}
+          NANOBOT_SHA: ${{ steps.resolve.outputs.nanobot_sha }}
+        run: |
+          set -euo pipefail
+          skip=0
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            current="$(ssh -i ~/.ssh/deploy_key "$BOX1_USER@$BOX1_HOST" \
+              'cat /opt/ola-production/current.env 2>/dev/null || true')"
+            cur_crm="$(printf '%s\n' "$current" | sed -n 's/^CRM_SHA=//p')"
+            cur_bot="$(printf '%s\n' "$current" | sed -n 's/^NANOBOT_SHA=//p')"
+            if [[ "$cur_crm" == "$CRM_SHA" && "$cur_bot" == "$NANOBOT_SHA" ]]; then
+              echo "Production already running this pair; skipping promotion."
+              skip=1
+            fi
+          fi
+          printf 'skip=%s\n' "$skip" >> "$GITHUB_OUTPUT"
+
   promote:
+    needs: resolve
+    if: needs.resolve.outputs.skip != '1'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 35
     env:
-      CRM_SHA: ${{ inputs.crm_sha }}
-      NANOBOT_SHA: ${{ inputs.nanobot_sha }}
+      CRM_SHA: ${{ needs.resolve.outputs.crm_sha }}
+      NANOBOT_SHA: ${{ needs.resolve.outputs.nanobot_sha }}
     steps:
       - name: Validate immutable release identifiers
         run: |
@@ -57,14 +126,14 @@ jobs:
       - name: Checkout exact release definitions
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.crm_sha }}
+          ref: ${{ needs.resolve.outputs.crm_sha }}
           path: crm
 
       - name: Checkout exact nanobot release definitions
         uses: actions/checkout@v4
         with:
           repository: SeekMi-Technologies/Ola_bot
-          ref: ${{ inputs.nanobot_sha }}
+          ref: ${{ needs.resolve.outputs.nanobot_sha }}
           path: nanobot
 
       - name: Validate production database isolation
